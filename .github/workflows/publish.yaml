@@ -25,8 +25,8 @@ jobs:
         id: get_release
         run: |
           if [ -z "${{ github.event.release.upload_url }}" ]; then
-            # Manual trigger - get the latest release
-            RELEASE_TAG=$(gh api repos/${{ github.repository }}/releases --jq '.[0].tag_name' | head -1)
+            # Manual trigger - get the latest release by published_at date (most recent first)
+            RELEASE_TAG=$(gh api repos/${{ github.repository }}/releases --jq 'sort_by(.published_at) | reverse | .[0].tag_name' | head -1)
             echo "Found release tag: $RELEASE_TAG"
             UPLOAD_URL=$(gh api repos/${{ github.repository }}/releases/tags/$RELEASE_TAG --jq '.upload_url')
             echo "Upload URL (raw): $UPLOAD_URL"
