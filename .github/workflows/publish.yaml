@@ -66,6 +66,7 @@ jobs:
         with:
           upload_url: ${{ steps.get_release.outputs.upload_url }}
           asset_path: ./*
+          overwrite: true
   generate:
     runs-on: ubuntu-latest
     needs:
