@@ -108,15 +108,21 @@ public partial class StreamService(IXtreamClient xtreamClient)
     /// <returns>A <see cref="ParsedName"/> struct containing the cleaned title and parsed tags.</returns>
     public static ParsedName ParseName(string name)
     {
+        if (string.IsNullOrEmpty(name))
+        {
+            return new ParsedName { Title = string.Empty, Tags = [] };
+        }
+
         List<string> tags = [];
 
         // Strip country/language prefixes like "| NL |", "| DE |", "| FR |", etc. from the start
-        // This pattern matches: | (space) 2-3 uppercase letters (space) |
+        // This pattern matches: | (optional space) 2-3 letters (optional space) | (optional space)
+        // Also handles variations like "|NL|", "| NL|", "|NL |", etc.
         string cleanedName = Regex.Replace(
             name,
             @"^\|\s*[A-Z]{2,3}\s*\|",
             string.Empty,
-            RegexOptions.IgnoreCase);
+            RegexOptions.IgnoreCase).TrimStart();
 
         string title = _tagRegex.Replace(
             cleanedName,

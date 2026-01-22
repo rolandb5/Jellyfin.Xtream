@@ -4,3 +4,6 @@ obj/
 .idea/
 .vscode/
 artifacts
+
+# Local development notes (not committed to Git)
+docs/DEVELOPMENT_NOTES.md
