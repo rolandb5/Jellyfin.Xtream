@@ -292,12 +292,14 @@ public partial class StreamService(IXtreamClient xtreamClient)
         }
 
         Season? season = series.Seasons.FirstOrDefault(s => s.SeasonId == seasonId);
-        if (!series.Episodes.TryGetValue(seasonId, out var episodes))
+        
+        // Safely get episodes for the season
+        if (series.Episodes != null && series.Episodes.TryGetValue(seasonId, out var episodes) && episodes != null)
         {
-            return new List<Tuple<SeriesStreamInfo, Season?, Episode>>();
+            return episodes.Select((Episode episode) => new Tuple<SeriesStreamInfo, Season?, Episode>(series, season, episode));
         }
 
-        return episodes.Select((Episode episode) => new Tuple<SeriesStreamInfo, Season?, Episode>(series, season, episode));
+        return new List<Tuple<SeriesStreamInfo, Season?, Episode>>();
     }
 
     private static void StoreBytes(byte[] dst, int offset, int i)
