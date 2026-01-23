@@ -106,7 +106,7 @@ public class XtreamController(IXtreamClient xtreamClient, ILogger<XtreamControll
                 ServerTime = info.ServerInfo.TimeNow,
                 ServerTimezone = info.ServerInfo.Timezone,
                 Status = info.UserInfo.Status,
-                SupportsMpegTs = info.UserInfo.AllowedOutputFormats.Contains("ts", StringComparison.Ordinal),
+                SupportsMpegTs = info.UserInfo.AllowedOutputFormats.Contains("ts"),
             });
         }
         catch (HttpRequestException ex)
