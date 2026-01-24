@@ -233,7 +233,13 @@ public class SeriesCacheService : IDisposable
         try
         {
             string cacheKey = $"series_cache_{Plugin.Instance.DataVersion}_categories";
-            return _memoryCache.TryGetValue(cacheKey, out IEnumerable<Category>? categories) ? categories : null;
+            // Use List<Category> to match the stored type exactly
+            if (_memoryCache.TryGetValue(cacheKey, out List<Category>? categories) && categories != null)
+            {
+                return categories;
+            }
+
+            return null;
         }
         catch
         {
@@ -289,7 +295,13 @@ public class SeriesCacheService : IDisposable
         try
         {
             string cacheKey = $"series_cache_{Plugin.Instance.DataVersion}_episodes_{seriesId}_{seasonId}";
-            return _memoryCache.TryGetValue(cacheKey, out IEnumerable<Episode>? episodes) ? episodes : null;
+            // Use List<Episode> to match the stored type exactly
+            if (_memoryCache.TryGetValue(cacheKey, out List<Episode>? episodes) && episodes != null)
+            {
+                return episodes;
+            }
+
+            return null;
         }
         catch
         {
