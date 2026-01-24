@@ -58,9 +58,14 @@ export default function (view) {
       }
     });
 
-    // Clear cache button handler
-    if (clearCacheButton) {
-      clearCacheButton.addEventListener('click', () => {
+    // Clear cache button handler (prevent multiple event listeners)
+    if (clearCacheButton && !clearCacheButton.dataset.handlerAttached) {
+      clearCacheButton.dataset.handlerAttached = 'true';
+      
+      clearCacheButton.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+
         if (!confirm('Are you sure you want to clear all cached series data? This will force a fresh fetch from the Xtream API.')) {
           return;
         }

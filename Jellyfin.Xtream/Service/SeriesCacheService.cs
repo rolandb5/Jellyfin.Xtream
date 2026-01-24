@@ -118,10 +118,40 @@ public class SeriesCacheService : IDisposable
                 _currentStatus = "Fetching series list...";
                 progress?.Report(0.05);
                 List<Series> allSeries = new();
+                int categoryIndex = 0;
                 foreach (Category category in categoryList)
                 {
-                    IEnumerable<Series> seriesList = await _streamService.GetSeries(category.CategoryId, cancellationToken).ConfigureAwait(false);
-                    allSeries.AddRange(seriesList);
+                    categoryIndex++;
+                    try
+                    {
+                        // Check for cancellation before each category
+                        cancellationToken.ThrowIfCancellationRequested();
+                        
+                        _currentStatus = $"Fetching series list... ({categoryIndex}/{categoryList.Count})";
+                        _logger?.LogInformation("Fetching series for category {CategoryId} ({CategoryName}) - {Current}/{Total}", 
+                            category.CategoryId, category.CategoryName, categoryIndex, categoryList.Count);
+                        
+                        IEnumerable<Series> seriesList = await _streamService.GetSeries(category.CategoryId, cancellationToken).ConfigureAwait(false);
+                        allSeries.AddRange(seriesList);
+                        
+                        _logger?.LogInformation("Found {SeriesCount} series in category {CategoryId}", 
+                            seriesList.Count(), category.CategoryId);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        _logger?.LogWarning("Cache refresh cancelled while fetching category {CategoryId}", category.CategoryId);
+                        throw; // Re-throw cancellation
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger?.LogError(ex, "Failed to fetch series for category {CategoryId} ({CategoryName}), skipping...", 
+                            category.CategoryId, category.CategoryName);
+                        // Continue with next category instead of failing completely
+                    }
+                    
+                    // Update progress slightly for each category
+                    double categoryProgress = 0.05 + (categoryIndex / (double)categoryList.Count) * 0.05;
+                    progress?.Report(categoryProgress);
                 }
 
                 _logger?.LogInformation("Found {TotalSeries} total series across all categories", allSeries.Count);
