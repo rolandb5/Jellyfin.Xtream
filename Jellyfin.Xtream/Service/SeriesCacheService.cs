@@ -34,6 +34,10 @@ public class SeriesCacheService : IDisposable
     private readonly ILogger<SeriesCacheService>? _logger;
     private readonly SemaphoreSlim _refreshLock = new(1, 1);
     private bool _isRefreshing = false;
+    private double _currentProgress = 0.0;
+    private string _currentStatus = "Idle";
+    private DateTime? _lastRefreshStart;
+    private DateTime? _lastRefreshComplete;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="SeriesCacheService"/> class.
@@ -51,9 +55,10 @@ public class SeriesCacheService : IDisposable
     /// <summary>
     /// Pre-fetches and caches all series data (categories, series, seasons, episodes).
     /// </summary>
+    /// <param name="progress">Optional progress reporter (0.0 to 1.0).</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>A task representing the async operation.</returns>
-    public async Task RefreshCacheAsync(CancellationToken cancellationToken = default)
+    public async Task RefreshCacheAsync(IProgress<double>? progress = null, CancellationToken cancellationToken = default)
     {
         // Prevent concurrent refreshes
         if (!await _refreshLock.WaitAsync(0, cancellationToken).ConfigureAwait(false))
@@ -71,6 +76,9 @@ public class SeriesCacheService : IDisposable
             }
 
             _isRefreshing = true;
+            _currentProgress = 0.0;
+            _currentStatus = "Starting...";
+            _lastRefreshStart = DateTime.UtcNow;
             _logger?.LogInformation("Starting series data cache refresh");
 
             string dataVersion = Plugin.Instance.DataVersion;
@@ -91,6 +99,8 @@ public class SeriesCacheService : IDisposable
                 TimeSpan cacheExpiration = TimeSpan.FromMinutes(cacheExpirationMinutes);
 
                 // Fetch all categories
+                _currentStatus = "Fetching categories...";
+                progress?.Report(0.05);
                 _logger?.LogInformation("Fetching series categories...");
                 IEnumerable<Category> categories = await _streamService.GetSeriesCategories(cancellationToken).ConfigureAwait(false);
                 List<Category> categoryList = categories.ToList();
@@ -102,12 +112,22 @@ public class SeriesCacheService : IDisposable
                 int episodeCount = 0;
                 int categoryIndex = 0;
                 int totalCategories = categoryList.Count;
+                int totalSeries = 0; // Will be calculated after fetching all series lists
 
-                // Fetch all series, seasons, and episodes for each category
+                // First pass: count total series for progress calculation
+                foreach (Category category in categoryList)
+                {
+                    IEnumerable<Series> seriesList = await _streamService.GetSeries(category.CategoryId, cancellationToken).ConfigureAwait(false);
+                    totalSeries += seriesList.Count();
+                }
+
+                // Second pass: fetch and cache all data
+                int processedSeries = 0;
                 foreach (Category category in categoryList)
                 {
                     categoryIndex++;
                     _logger?.LogInformation("Processing category {CategoryIndex}/{TotalCategories}: {CategoryName} (ID: {CategoryId})", categoryIndex, totalCategories, category.CategoryName, category.CategoryId);
+                    progress?.Report(0.1 + (categoryIndex - 1) * 0.8 / totalCategories); // 10% for categories, 80% for series processing
 
                     IEnumerable<Series> seriesList = await _streamService.GetSeries(category.CategoryId, cancellationToken).ConfigureAwait(false);
                     List<Series> seriesListItems = seriesList.ToList();
@@ -118,8 +138,17 @@ public class SeriesCacheService : IDisposable
                     {
                         seriesCount++;
                         seriesInCategory++;
+                        processedSeries++;
 
-                        // Log progress every 10 series or at the start
+                        // Report progress and log every 10 series or at the start
+                        if (totalSeries > 0)
+                        {
+                            double progressValue = 0.1 + (processedSeries * 0.8 / totalSeries); // 10% for categories, 80% for series
+                            _currentProgress = progressValue;
+                            _currentStatus = $"Processing series {processedSeries}/{totalSeries} ({seriesCount} series, {seasonCount} seasons, {episodeCount} episodes)";
+                            progress?.Report(progressValue);
+                        }
+
                         if (seriesInCategory == 1 || seriesInCategory % 10 == 0)
                         {
                             _logger?.LogInformation("  Processing series {SeriesInCategory}/{TotalInCategory}: {SeriesName} (ID: {SeriesId}) - Total progress: {TotalSeries} series, {TotalSeasons} seasons, {TotalEpisodes} episodes", seriesInCategory, seriesListItems.Count, series.Name, series.SeriesId, seriesCount, seasonCount, episodeCount);
@@ -171,6 +200,10 @@ public class SeriesCacheService : IDisposable
                     _logger?.LogInformation("Completed category {CategoryName}: {SeriesInCategory} series, running totals: {TotalSeries} series, {TotalSeasons} seasons, {TotalEpisodes} episodes", category.CategoryName, seriesInCategory, seriesCount, seasonCount, episodeCount);
                 }
 
+                progress?.Report(1.0); // 100% complete
+                _currentProgress = 1.0;
+                _currentStatus = $"Completed: {seriesCount} series, {seasonCount} seasons, {episodeCount} episodes";
+                _lastRefreshComplete = DateTime.UtcNow;
                 _logger?.LogInformation("Cache refresh completed: {SeriesCount} series, {SeasonCount} seasons, {EpisodeCount} episodes across {CategoryCount} categories", seriesCount, seasonCount, episodeCount, totalCategories);
             }
             catch (Exception ex)
@@ -182,6 +215,11 @@ public class SeriesCacheService : IDisposable
         finally
         {
             _isRefreshing = false;
+            if (_currentProgress < 1.0)
+            {
+                _currentStatus = "Failed or cancelled";
+            }
+
             _refreshLock.Release();
         }
     }
@@ -285,6 +323,15 @@ public class SeriesCacheService : IDisposable
         {
             return false;
         }
+    }
+
+    /// <summary>
+    /// Gets the current cache refresh status.
+    /// </summary>
+    /// <returns>Cache status information.</returns>
+    public (bool IsRefreshing, double Progress, string Status, DateTime? StartTime, DateTime? CompleteTime) GetStatus()
+    {
+        return (_isRefreshing, _currentProgress, _currentStatus, _lastRefreshStart, _lastRefreshComplete);
     }
 
     /// <inheritdoc />

@@ -201,4 +201,24 @@ public class XtreamController(IXtreamClient xtreamClient) : ControllerBase
         var channels = streams.Select(CreateChannelResponse).ToList();
         return Ok(channels);
     }
+
+    /// <summary>
+    /// Get the current cache refresh status.
+    /// </summary>
+    /// <returns>Cache status information.</returns>
+    [Authorize(Policy = "RequiresElevation")]
+    [HttpGet("SeriesCacheStatus")]
+    public ActionResult<object> GetSeriesCacheStatus()
+    {
+        var (isRefreshing, progress, status, startTime, completeTime) = Plugin.Instance.SeriesCacheService.GetStatus();
+        return Ok(new
+        {
+            IsRefreshing = isRefreshing,
+            Progress = progress,
+            Status = status,
+            StartTime = startTime,
+            CompleteTime = completeTime,
+            IsCachePopulated = Plugin.Instance.SeriesCacheService.IsCachePopulated()
+        });
+    }
 }

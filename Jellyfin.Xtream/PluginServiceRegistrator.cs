@@ -15,11 +15,13 @@
 
 using Jellyfin.Xtream.Client;
 using Jellyfin.Xtream.Providers;
+using Jellyfin.Xtream.Tasks;
 using MediaBrowser.Controller;
 using MediaBrowser.Controller.Channels;
 using MediaBrowser.Controller.LiveTv;
 using MediaBrowser.Controller.Plugins;
 using MediaBrowser.Controller.Providers;
+using MediaBrowser.Controller.Tasks;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Jellyfin.Xtream;
@@ -36,5 +38,6 @@ public class PluginServiceRegistrator : IPluginServiceRegistrator
         serviceCollection.AddSingleton<IChannel, SeriesChannel>();
         serviceCollection.AddSingleton<IChannel, VodChannel>();
         serviceCollection.AddSingleton<IPreRefreshProvider, XtreamVodProvider>();
+        serviceCollection.AddSingleton<IScheduledTask, SeriesCacheRefreshTask>();
     }
 }

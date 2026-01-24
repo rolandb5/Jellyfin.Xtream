@@ -12,10 +12,53 @@ export default function (view) {
     const visible = view.querySelector("#Visible");
     const flattenSeriesView = view.querySelector("#FlattenSeriesView");
     const cacheExpirationMinutes = view.querySelector("#SeriesCacheExpirationMinutes");
+    const cacheStatusContainer = view.querySelector("#CacheStatusContainer");
+    const cacheProgressFill = view.querySelector("#CacheProgressFill");
+    const cacheStatusText = view.querySelector("#CacheStatusText");
+    
     getConfig.then((config) => {
       visible.checked = config.IsSeriesVisible;
       flattenSeriesView.checked = config.FlattenSeriesView || false;
       cacheExpirationMinutes.value = config.SeriesCacheExpirationMinutes || 60;
+    });
+
+    // Poll cache status every 2 seconds
+    let statusPollInterval;
+    function updateCacheStatus() {
+      ApiClient.fetch('Xtream/SeriesCacheStatus')
+        .then((response) => response.json())
+        .then((status) => {
+          if (status.IsRefreshing || status.Progress > 0 || status.IsCachePopulated) {
+            cacheStatusContainer.style.display = 'block';
+            const progressPercent = Math.round(status.Progress * 100);
+            cacheProgressFill.style.width = progressPercent + '%';
+            cacheStatusText.textContent = status.Status || 'Idle';
+            
+            if (status.IsRefreshing) {
+              cacheStatusText.style.color = '#00a4dc';
+            } else if (status.Progress >= 1.0) {
+              cacheStatusText.style.color = '#4caf50';
+            } else {
+              cacheStatusText.style.color = '#a0a0a0';
+            }
+          } else {
+            cacheStatusContainer.style.display = 'none';
+          }
+        })
+        .catch(() => {
+          // Silently fail if API is not available
+        });
+    }
+
+    // Start polling when view is shown
+    updateCacheStatus();
+    statusPollInterval = setInterval(updateCacheStatus, 2000);
+
+    // Clean up interval when view is hidden
+    view.addEventListener("viewhide", () => {
+      if (statusPollInterval) {
+        clearInterval(statusPollInterval);
+      }
     });
     const table = view.querySelector('#SeriesContent');
     Xtream.populateCategoriesTable(
