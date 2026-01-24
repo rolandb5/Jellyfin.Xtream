@@ -115,6 +115,8 @@ public class SeriesChannel(ILogger<SeriesChannel> logger) : IChannel, IDisableMe
 
             Guid guid = Guid.Parse(query.FolderId);
             StreamService.FromGuid(guid, out int prefix, out int categoryId, out int seriesId, out int seasonId);
+            logger.LogInformation("GetChannelItems: FolderId={FolderId}, prefix={Prefix}, categoryId={CategoryId}, seriesId={SeriesId}, seasonId={SeasonId}", query.FolderId, prefix, categoryId, seriesId, seasonId);
+            
             if (prefix == StreamService.SeriesCategoryPrefix)
             {
                 return await GetSeries(categoryId, cancellationToken).ConfigureAwait(false);
@@ -122,6 +124,7 @@ public class SeriesChannel(ILogger<SeriesChannel> logger) : IChannel, IDisableMe
 
             if (prefix == StreamService.SeriesPrefix)
             {
+                logger.LogInformation("Calling GetSeasons for seriesId={SeriesId}", seriesId);
                 return await GetSeasons(seriesId, cancellationToken).ConfigureAwait(false);
             }
 
@@ -208,6 +211,7 @@ public class SeriesChannel(ILogger<SeriesChannel> logger) : IChannel, IDisableMe
             FolderType = ChannelFolderType.Season,
             Genres = GetGenres(serie.Genre),
             Id = StreamService.ToGuid(StreamService.SeasonPrefix, serie.CategoryId, seriesId, seasonId).ToString(),
+            ImageUrl = cover,
             IndexNumber = seasonId,
             Name = name,
             Overview = overview,
