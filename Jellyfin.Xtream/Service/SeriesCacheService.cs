@@ -27,7 +27,7 @@ namespace Jellyfin.Xtream.Service;
 /// <summary>
 /// Service for pre-fetching and caching all series data upfront.
 /// </summary>
-public class SeriesCacheService
+public class SeriesCacheService : IDisposable
 {
     private readonly StreamService _streamService;
     private readonly IMemoryCache _memoryCache;
@@ -52,10 +52,11 @@ public class SeriesCacheService
     /// Pre-fetches and caches all series data (categories, series, seasons, episodes).
     /// </summary>
     /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>A task representing the async operation.</returns>
     public async Task RefreshCacheAsync(CancellationToken cancellationToken = default)
     {
         // Prevent concurrent refreshes
-        if (!await _refreshLock.WaitAsync(0, cancellationToken))
+        if (!await _refreshLock.WaitAsync(0, cancellationToken).ConfigureAwait(false))
         {
             _logger?.LogInformation("Cache refresh already in progress, skipping");
             return;
@@ -86,6 +87,7 @@ public class SeriesCacheService
                 {
                     cacheExpirationMinutes = 60; // Default to 1 hour if invalid
                 }
+
                 TimeSpan cacheExpiration = TimeSpan.FromMinutes(cacheExpirationMinutes);
 
                 // Fetch all categories
@@ -100,16 +102,16 @@ public class SeriesCacheService
                 foreach (Category category in categories)
                 {
                     IEnumerable<Series> seriesList = await _streamService.GetSeries(category.CategoryId, cancellationToken).ConfigureAwait(false);
-                    
+
                     foreach (Series series in seriesList)
                     {
                         seriesCount++;
-                        
+
                         try
                         {
                             // Fetch seasons for this series
                             IEnumerable<Tuple<SeriesStreamInfo, int>> seasons = await _streamService.GetSeasons(series.SeriesId, cancellationToken).ConfigureAwait(false);
-                            
+
                             SeriesStreamInfo? seriesStreamInfo = null;
                             foreach (var seasonTuple in seasons)
                             {
@@ -117,19 +119,19 @@ public class SeriesCacheService
                                 {
                                     seriesStreamInfo = seasonTuple.Item1;
                                 }
-                                
+
                                 int seasonId = seasonTuple.Item2;
                                 seasonCount++;
 
                                 // Fetch episodes for this season
                                 IEnumerable<Tuple<SeriesStreamInfo, Season?, Episode>> episodes = await _streamService.GetEpisodes(series.SeriesId, seasonId, cancellationToken).ConfigureAwait(false);
-                                
+
                                 List<Episode> episodeList = episodes.Select(e => e.Item3).ToList();
                                 episodeCount += episodeList.Count;
 
                                 // Cache episodes for this season
                                 _memoryCache.Set($"{cachePrefix}episodes_{series.SeriesId}_{seasonId}", episodeList, cacheExpiration);
-                                
+
                                 // Cache season info
                                 Season? season = seriesStreamInfo.Seasons.FirstOrDefault(s => s.SeasonId == seasonId);
                                 _memoryCache.Set($"{cachePrefix}season_{series.SeriesId}_{seasonId}", season, cacheExpiration);
@@ -166,6 +168,7 @@ public class SeriesCacheService
     /// <summary>
     /// Gets cached categories.
     /// </summary>
+    /// <returns>Cached categories, or null if not available.</returns>
     public IEnumerable<Category>? GetCachedCategories()
     {
         try
@@ -182,6 +185,8 @@ public class SeriesCacheService
     /// <summary>
     /// Gets cached series stream info.
     /// </summary>
+    /// <param name="seriesId">The series ID.</param>
+    /// <returns>Cached series stream info, or null if not available.</returns>
     public SeriesStreamInfo? GetCachedSeriesInfo(int seriesId)
     {
         try
@@ -198,6 +203,9 @@ public class SeriesCacheService
     /// <summary>
     /// Gets cached season info.
     /// </summary>
+    /// <param name="seriesId">The series ID.</param>
+    /// <param name="seasonId">The season ID.</param>
+    /// <returns>Cached season info, or null if not available.</returns>
     public Season? GetCachedSeason(int seriesId, int seasonId)
     {
         try
@@ -214,6 +222,9 @@ public class SeriesCacheService
     /// <summary>
     /// Gets cached episodes for a season.
     /// </summary>
+    /// <param name="seriesId">The series ID.</param>
+    /// <param name="seasonId">The season ID.</param>
+    /// <returns>Cached episodes, or null if not available.</returns>
     public IEnumerable<Episode>? GetCachedEpisodes(int seriesId, int seasonId)
     {
         try
@@ -241,6 +252,7 @@ public class SeriesCacheService
     /// <summary>
     /// Checks if cache is populated for the current data version.
     /// </summary>
+    /// <returns>True if cache is populated, false otherwise.</returns>
     public bool IsCachePopulated()
     {
         try
@@ -252,5 +264,11 @@ public class SeriesCacheService
         {
             return false;
         }
+    }
+
+    /// <inheritdoc />
+    public void Dispose()
+    {
+        _refreshLock?.Dispose();
     }
 }
