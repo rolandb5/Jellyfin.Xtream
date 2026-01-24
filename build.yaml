@@ -13,6 +13,9 @@ owner: "Kevinjil"
 artifacts:
   - "Jellyfin.Xtream.dll"
 changelog: >
+  - NEW: Detailed progress logging for cache refresh - See real-time progress in logs!
+  - Progress logs show: categories processed, series count, seasons, episodes, and running totals
+  - View progress via Jellyfin logs or Docker: docker logs jellyfin -f | grep cache
   - NEW: Pre-fetch and cache all series data upfront - No more lazy loading delays!
   - All series, seasons, and episodes are now cached when plugin loads or configuration changes
   - Navigation is instant - data loads from cache instead of making API calls on every page visit
