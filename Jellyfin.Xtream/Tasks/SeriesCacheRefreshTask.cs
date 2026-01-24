@@ -38,13 +38,19 @@ public class SeriesCacheRefreshTask : IScheduledTask
     /// <inheritdoc />
     public string Key => "XtreamSeriesCacheRefresh";
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Gets a value indicating whether this task is hidden from the UI.
+    /// </summary>
     public bool IsHidden => false;
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Gets a value indicating whether this task is enabled.
+    /// </summary>
     public bool IsEnabled => true;
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Gets a value indicating whether this task should be logged.
+    /// </summary>
     public bool IsLogged => true;
 
     /// <inheritdoc />
@@ -60,7 +66,11 @@ public class SeriesCacheRefreshTask : IScheduledTask
         await Plugin.Instance.SeriesCacheService.RefreshCacheAsync(progress, cancellationToken).ConfigureAwait(false);
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Executes the task without progress reporting.
+    /// </summary>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>A task representing the async operation.</returns>
     public Task ExecuteAsync(CancellationToken cancellationToken)
     {
         return ExecuteAsync(new Progress<double>(), cancellationToken);
