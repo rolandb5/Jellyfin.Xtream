@@ -401,6 +401,208 @@ dotnet_separate_import_directive_groups = false
 
 ---
 
+## Build Validation Workflow
+
+### Before Committing or Creating a Release
+
+**Always validate your build before pushing or creating a release:**
+
+```bash
+# Step 1: Run all local checks
+make check
+
+# This will:
+# - Fix trailing whitespace
+# - Build the project with all analyzers
+# - Show any errors
+```
+
+**If build fails, follow this workflow:**
+
+1. **Read the error message** - Identify the error code (e.g., `CS0234`, `SA1648`, `SA1407`)
+2. **Fix the error** - See error-specific fixes below
+3. **Rebuild** - Run `make check` again
+4. **Verify** - Ensure build succeeds before committing
+
+### Build Validation Checklist
+
+Before creating a release:
+- [ ] `make check` passes locally
+- [ ] No compiler errors (CS####)
+- [ ] No StyleCop warnings (SA####)
+- [ ] No Code Analysis warnings (CA####)
+- [ ] All new public methods have XML documentation
+- [ ] Version updated in `build.yaml`
+- [ ] Changelog updated in `build.yaml`
+
+### Common Build Errors (From Recent Experience)
+
+#### CS0234: Namespace Not Found
+**Error:** `The type or namespace name 'X' does not exist in the namespace 'Y'`
+**Example:** `MediaBrowser.Controller.Tasks` → Should be `MediaBrowser.Model.Tasks`
+
+**Fix:**
+1. Check existing code for correct namespace usage
+2. Use `grep` to find correct namespace: `grep -r "IScheduledTask" --include="*.cs" .`
+3. Update using statement to correct namespace
+4. Rebuild: `make check`
+
+#### CS0535: Interface Member Not Implemented
+**Error:** `'Class' does not implement interface member 'Interface.Method()'`
+**Example:** `IScheduledTask.GetDefaultTriggers()` was missing
+
+**Fix:**
+1. Check interface definition or documentation
+2. Implement missing method
+3. For `IScheduledTask`, add:
+   ```csharp
+   public IEnumerable<TaskTriggerInfo> GetDefaultTriggers()
+   {
+       return Array.Empty<TaskTriggerInfo>();
+   }
+   ```
+4. Rebuild: `make check`
+
+#### SA1648: Invalid inheritdoc
+**Error:** `inheritdoc should be used with inheriting class`
+**Cause:** Using `/// <inheritdoc />` on properties/methods that don't inherit from a base class
+
+**Fix:**
+1. Replace `/// <inheritdoc />` with explicit XML documentation:
+   ```csharp
+   // Bad
+   /// <inheritdoc />
+   public bool IsEnabled => true;
+   
+   // Good
+   /// <summary>
+   /// Gets a value indicating whether this task is enabled.
+   /// </summary>
+   public bool IsEnabled => true;
+   ```
+2. Rebuild: `make check`
+
+#### SA1407: Arithmetic Precedence
+**Error:** `Arithmetic expressions should declare precedence`
+**Cause:** Complex arithmetic without explicit parentheses
+
+**Fix:**
+1. Add parentheses to clarify precedence:
+   ```csharp
+   // Bad
+   progress?.Report(0.1 + (categoryIndex - 1) * 0.8 / totalCategories);
+   
+   // Good
+   progress?.Report(0.1 + (((categoryIndex - 1) * 0.8) / totalCategories));
+   ```
+2. Rebuild: `make check`
+
+### Rebuild After Fixes
+
+**After fixing errors:**
+
+```bash
+# Option 1: Use Makefile (recommended)
+make check
+
+# Option 2: Manual rebuild
+make fix-whitespace
+dotnet clean
+dotnet build --configuration Release --no-incremental
+
+# Option 3: Full clean rebuild
+dotnet clean
+dotnet restore
+dotnet build --configuration Release --no-incremental
+```
+
+**Verify build succeeded:**
+```bash
+# Check exit code (should be 0)
+echo $?
+
+# Or check for errors
+dotnet build --configuration Release --no-incremental 2>&1 | grep -i error
+```
+
+### GitHub Actions Build Validation
+
+**Before creating a release, you can validate via GitHub Actions:**
+
+```bash
+# Trigger build workflow manually
+gh workflow run "🚀 Publish Plugin" --repo rolandb5/Jellyfin.Xtream --ref master
+
+# Monitor the build
+gh run watch --repo rolandb5/Jellyfin.Xtream
+
+# Check build status
+gh run list --workflow="🚀 Publish Plugin" --repo rolandb5/Jellyfin.Xtream --limit 1
+```
+
+**If GitHub Actions build fails:**
+
+1. **View logs:**
+   ```bash
+   gh run view <run-id> --repo rolandb5/Jellyfin.Xtream --log
+   ```
+
+2. **Find errors:**
+   ```bash
+   gh run view <run-id> --repo rolandb5/Jellyfin.Xtream --log | grep -i "##\[error\]"
+   ```
+
+3. **Fix errors locally** (see error-specific fixes above)
+
+4. **Commit and push fixes:**
+   ```bash
+   git add -A
+   git commit -m "Fix build error: [description]"
+   git push origin master
+   ```
+
+5. **Trigger new build:**
+   ```bash
+   gh workflow run "🚀 Publish Plugin" --repo rolandb5/Jellyfin.Xtream --ref master
+   ```
+
+### Release Workflow with Validation
+
+**Complete release workflow with validation:**
+
+```bash
+# 1. Validate build locally
+make check
+
+# 2. Update version in build.yaml
+# Edit build.yaml: version: "0.9.3.0"
+
+# 3. Update changelog in build.yaml
+
+# 4. Commit changes
+git add build.yaml
+git commit -m "Bump version to 0.9.3.0"
+git push origin master
+
+# 5. Create and push tag
+git tag v0.9.3.0
+git push origin v0.9.3.0
+
+# 6. Create release (triggers build automatically)
+gh release create v0.9.3.0 --repo rolandb5/Jellyfin.Xtream \
+  --title "v0.9.3.0 - Feature Name" \
+  --notes "Release notes..."
+
+# 7. Monitor build
+gh run list --workflow="🚀 Publish Plugin" --repo rolandb5/Jellyfin.Xtream --limit 1
+
+# 8. If build fails, fix and rebuild (see above)
+# 9. If build succeeds, verify release assets
+gh release view v0.9.3.0 --repo rolandb5/Jellyfin.Xtream --json assets
+```
+
+---
+
 ## Summary
 
 **Most Common Issues:**
@@ -410,13 +612,24 @@ dotnet_separate_import_directive_groups = false
 4. ✅ IDisposable pattern (CA1063) - **Fix:** Implement full pattern
 5. ✅ ConfigureAwait (CA2007) - **Fix:** Always use `.ConfigureAwait(false)`
 6. ✅ Logger type mismatch - **Fix:** Use `ILoggerFactory`
+7. ✅ Wrong namespace (CS0234) - **Fix:** Check existing code for correct namespace
+8. ✅ Missing interface method (CS0535) - **Fix:** Implement all interface members
+9. ✅ Invalid inheritdoc (SA1648) - **Fix:** Use explicit XML docs instead
+10. ✅ Arithmetic precedence (SA1407) - **Fix:** Add explicit parentheses
 
 **Best Practices:**
-- Build locally before pushing
-- Use pre-commit hooks
+- **Always** run `make check` before committing
+- **Always** validate build before creating release
+- Use pre-commit hooks to catch errors early
 - Configure editor to auto-fix common issues
-- Run `make check` or equivalent before committing
-- Review this checklist before PRs
+- Review this checklist before PRs and releases
+- Fix errors locally before pushing to GitHub
+- Monitor GitHub Actions builds after pushing
+
+**Build Validation Command:**
+```bash
+make check  # Fixes whitespace + builds + shows errors
+```
 
 ---
 
