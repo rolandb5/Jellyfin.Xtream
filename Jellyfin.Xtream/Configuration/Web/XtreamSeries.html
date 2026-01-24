@@ -25,6 +25,16 @@
             How long to cache series data before refreshing. Default is 60 minutes (1 hour). Lower values mean fresher data but more API calls. Higher values reduce API calls but data may be stale longer.
           </div>
         </div>
+        <div class="inputContainer" id="CacheStatusContainer" style="display: none;">
+          <label class="inputLabel">Cache Refresh Status</label>
+          <div id="CacheProgressBar" style="width: 100%; height: 20px; background-color: #2a2a2a; border-radius: 4px; overflow: hidden; margin: 8px 0;">
+            <div id="CacheProgressFill" style="height: 100%; background-color: #00a4dc; width: 0%; transition: width 0.3s ease;"></div>
+          </div>
+          <div id="CacheStatusText" style="color: #a0a0a0; font-size: 0.9em; margin-top: 4px;">Idle</div>
+          <div class="fieldDescription">
+            Current cache refresh progress. You can also view this in Dashboard → Scheduled Tasks → "Refresh Xtream Series Cache".
+          </div>
+        </div>
         <div class="sectionTitleContainer flex align-items-center">
           <h2 class="sectionTitle">Series selection</h2>
         </div>

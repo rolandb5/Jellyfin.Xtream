@@ -1,7 +1,7 @@
 ---
 name: "Jellyfin Xtream (Flat View)"
 guid: "5d774c35-8567-46d3-a950-9bb8227a0c5d"
-version: "0.9.2.1"
+version: "0.9.3.0"
 targetAbi: "10.11.0.0"
 framework: "net9.0"
 overview: "Stream content from an Xtream-compatible server with flat series and VOD view."
@@ -13,6 +13,11 @@ owner: "Kevinjil"
 artifacts:
   - "Jellyfin.Xtream.dll"
 changelog: >
+  - NEW: Graphical progress indicator for cache refresh!
+  - Progress bar and status shown in Series configuration page (updates every 2 seconds)
+  - Scheduled task "Refresh Xtream Series Cache" appears in Dashboard → Scheduled Tasks
+  - Task shows progress percentage, status message, and can be triggered manually
+  - API endpoint /Xtream/SeriesCacheStatus provides programmatic access to cache status
   - NEW: Detailed progress logging for cache refresh - See real-time progress in logs!
   - Progress logs show: categories processed, series count, seasons, episodes, and running totals
   - View progress via Jellyfin logs or Docker: docker logs jellyfin -f | grep cache

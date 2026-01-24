@@ -1,0 +1,67 @@
+// Copyright (C) 2022  Kevin Jilissen
+
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+
+// You should have received a copy of the GNU General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+using System;
+using System.Threading;
+using System.Threading.Tasks;
+using MediaBrowser.Model.Tasks;
+
+namespace Jellyfin.Xtream.Tasks;
+
+/// <summary>
+/// Scheduled task for refreshing series cache with progress tracking.
+/// </summary>
+public class SeriesCacheRefreshTask : IScheduledTask
+{
+    /// <inheritdoc />
+    public string Name => "Refresh Xtream Series Cache";
+
+    /// <inheritdoc />
+    public string Description => "Pre-fetches and caches all series data (categories, series, seasons, episodes) for faster navigation.";
+
+    /// <inheritdoc />
+    public string Category => "Xtream";
+
+    /// <inheritdoc />
+    public string Key => "XtreamSeriesCacheRefresh";
+
+    /// <inheritdoc />
+    public bool IsHidden => false;
+
+    /// <inheritdoc />
+    public bool IsEnabled => true;
+
+    /// <inheritdoc />
+    public bool IsLogged => true;
+
+    /// <inheritdoc />
+    public async Task ExecuteAsync(IProgress<double> progress, CancellationToken cancellationToken)
+    {
+        if (Plugin.Instance?.SeriesCacheService == null)
+        {
+            return;
+        }
+
+        // The SeriesCacheService will report progress through its own mechanism
+        // We just trigger the refresh and let it handle progress reporting
+        await Plugin.Instance.SeriesCacheService.RefreshCacheAsync(progress, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc />
+    public Task ExecuteAsync(CancellationToken cancellationToken)
+    {
+        return ExecuteAsync(new Progress<double>(), cancellationToken);
+    }
+}
