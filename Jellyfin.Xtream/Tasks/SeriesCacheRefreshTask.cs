@@ -14,6 +14,7 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using MediaBrowser.Model.Tasks;
@@ -63,5 +64,12 @@ public class SeriesCacheRefreshTask : IScheduledTask
     public Task ExecuteAsync(CancellationToken cancellationToken)
     {
         return ExecuteAsync(new Progress<double>(), cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public IEnumerable<TaskTriggerInfo> GetDefaultTriggers()
+    {
+        // No default triggers - task is manual only
+        return Array.Empty<TaskTriggerInfo>();
     }
 }
