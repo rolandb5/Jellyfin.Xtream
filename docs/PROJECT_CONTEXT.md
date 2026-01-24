@@ -185,6 +185,29 @@ https://rolandb5.github.io/Jellyfin.Xtream/repository.json
 
 ## Development Workflow
 
+### Build Validation (CRITICAL)
+
+**Always validate builds before committing or creating releases:**
+
+```bash
+# Run all checks (recommended - fixes whitespace + builds)
+make check
+
+# If build fails, fix errors and rebuild:
+# 1. Read error message
+# 2. Fix error (see docs/BUILD_ERRORS_PREVENTION.md)
+# 3. Rebuild: make check
+# 4. Verify: echo $? (should be 0)
+```
+
+**Common build errors and fixes:**
+- **CS0234 (Wrong namespace):** Check existing code for correct namespace
+- **CS0535 (Missing interface method):** Implement all interface members
+- **SA1648 (Invalid inheritdoc):** Use explicit XML docs instead
+- **SA1407 (Arithmetic precedence):** Add explicit parentheses
+
+See `docs/BUILD_ERRORS_PREVENTION.md` for complete error reference.
+
 ### Before Committing
 ```bash
 # Run all checks (recommended)
@@ -193,6 +216,19 @@ make check
 # Or manually
 make fix-whitespace
 dotnet build --configuration Release --no-incremental
+```
+
+### Before Creating Release
+```bash
+# 1. Validate build
+make check
+
+# 2. Update version in build.yaml
+# 3. Update changelog in build.yaml
+# 4. Commit and push
+# 5. Create tag and release
+# 6. Monitor GitHub Actions build
+# 7. If build fails, fix and rebuild (see BUILD_ERRORS_PREVENTION.md)
 ```
 
 ### Editor Configuration
