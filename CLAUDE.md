@@ -1,4 +1,6 @@
-# Jellyfin Xtream Flat View - Project Context
+# Jellyfin Xtream Flat View - Quick Reference
+
+> **For AI Assistants:** This is a quick reference. For comprehensive context, see `docs/PROJECT_CONTEXT.md`.
 
 ## Build & Release Process
 
@@ -63,5 +65,13 @@ Located in `Service/StreamService.cs`, the `ParseName()` method strips tags from
 
 Users add this repository URL to Jellyfin's plugin repositories:
 ```
-https://raw.githubusercontent.com/rolandb5/Jellyfin.Xtream/master/manifest.json
+https://rolandb5.github.io/Jellyfin.Xtream/repository.json
 ```
+
+## Documentation Files
+
+- **`CLAUDE.md`** (this file) - Quick reference for AI assistants
+- **`docs/PROJECT_CONTEXT.md`** - Comprehensive project context
+- **`docs/BUILD_ERRORS_PREVENTION.md`** - Guide to prevent build errors
+- **`docs/PR_PROPOSAL.md`** - Strategy for upstream contributions
+- **`docs/DEVELOPMENT_NOTES.md`** - Local development notes (gitignored)

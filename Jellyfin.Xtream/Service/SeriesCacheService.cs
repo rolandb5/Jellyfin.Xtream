@@ -91,29 +91,48 @@ public class SeriesCacheService : IDisposable
                 TimeSpan cacheExpiration = TimeSpan.FromMinutes(cacheExpirationMinutes);
 
                 // Fetch all categories
+                _logger?.LogInformation("Fetching series categories...");
                 IEnumerable<Category> categories = await _streamService.GetSeriesCategories(cancellationToken).ConfigureAwait(false);
-                _memoryCache.Set($"{cachePrefix}categories", categories, cacheExpiration);
+                List<Category> categoryList = categories.ToList();
+                _memoryCache.Set($"{cachePrefix}categories", categoryList, cacheExpiration);
+                _logger?.LogInformation("Found {CategoryCount} categories", categoryList.Count);
 
                 int seriesCount = 0;
                 int seasonCount = 0;
                 int episodeCount = 0;
+                int categoryIndex = 0;
+                int totalCategories = categoryList.Count;
 
                 // Fetch all series, seasons, and episodes for each category
-                foreach (Category category in categories)
+                foreach (Category category in categoryList)
                 {
-                    IEnumerable<Series> seriesList = await _streamService.GetSeries(category.CategoryId, cancellationToken).ConfigureAwait(false);
+                    categoryIndex++;
+                    _logger?.LogInformation("Processing category {CategoryIndex}/{TotalCategories}: {CategoryName} (ID: {CategoryId})", categoryIndex, totalCategories, category.CategoryName, category.CategoryId);
 
-                    foreach (Series series in seriesList)
+                    IEnumerable<Series> seriesList = await _streamService.GetSeries(category.CategoryId, cancellationToken).ConfigureAwait(false);
+                    List<Series> seriesListItems = seriesList.ToList();
+                    _logger?.LogInformation("  Found {SeriesCount} series in category {CategoryName}", seriesListItems.Count, category.CategoryName);
+
+                    int seriesInCategory = 0;
+                    foreach (Series series in seriesListItems)
                     {
                         seriesCount++;
+                        seriesInCategory++;
+
+                        // Log progress every 10 series or at the start
+                        if (seriesInCategory == 1 || seriesInCategory % 10 == 0)
+                        {
+                            _logger?.LogInformation("  Processing series {SeriesInCategory}/{TotalInCategory}: {SeriesName} (ID: {SeriesId}) - Total progress: {TotalSeries} series, {TotalSeasons} seasons, {TotalEpisodes} episodes", seriesInCategory, seriesListItems.Count, series.Name, series.SeriesId, seriesCount, seasonCount, episodeCount);
+                        }
 
                         try
                         {
                             // Fetch seasons for this series
                             IEnumerable<Tuple<SeriesStreamInfo, int>> seasons = await _streamService.GetSeasons(series.SeriesId, cancellationToken).ConfigureAwait(false);
+                            List<Tuple<SeriesStreamInfo, int>> seasonList = seasons.ToList();
 
                             SeriesStreamInfo? seriesStreamInfo = null;
-                            foreach (var seasonTuple in seasons)
+                            foreach (var seasonTuple in seasonList)
                             {
                                 if (seriesStreamInfo == null)
                                 {
@@ -145,12 +164,14 @@ public class SeriesCacheService : IDisposable
                         }
                         catch (Exception ex)
                         {
-                            _logger?.LogWarning(ex, "Failed to cache data for series {SeriesId}", series.SeriesId);
+                            _logger?.LogWarning(ex, "Failed to cache data for series {SeriesId} ({SeriesName})", series.SeriesId, series.Name);
                         }
                     }
+
+                    _logger?.LogInformation("Completed category {CategoryName}: {SeriesInCategory} series, running totals: {TotalSeries} series, {TotalSeasons} seasons, {TotalEpisodes} episodes", category.CategoryName, seriesInCategory, seriesCount, seasonCount, episodeCount);
                 }
 
-                _logger?.LogInformation("Cache refresh completed: {SeriesCount} series, {SeasonCount} seasons, {EpisodeCount} episodes", seriesCount, seasonCount, episodeCount);
+                _logger?.LogInformation("Cache refresh completed: {SeriesCount} series, {SeasonCount} seasons, {EpisodeCount} episodes across {CategoryCount} categories", seriesCount, seasonCount, episodeCount, totalCategories);
             }
             catch (Exception ex)
             {
