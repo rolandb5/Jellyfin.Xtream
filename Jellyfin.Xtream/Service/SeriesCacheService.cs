@@ -466,18 +466,19 @@ public class SeriesCacheService : IDisposable
         try
         {
             int clearedCount = 0;
-            
+
             // Clear all tracked cache keys
             foreach (string key in _cacheKeys.Keys)
             {
                 _memoryCache.Remove(key);
                 clearedCount++;
             }
+
             _cacheKeys.Clear();
-            
+
             // Clear incremental tracking
             _seriesLastModified.Clear();
-            
+
             // Reset status
             _currentProgress = 0.0;
             _currentStatus = "Cache cleared";
