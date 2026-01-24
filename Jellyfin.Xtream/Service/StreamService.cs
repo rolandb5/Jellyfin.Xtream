@@ -295,13 +295,43 @@ public partial class StreamService(IXtreamClient xtreamClient)
 
         Season? season = series.Seasons.FirstOrDefault(s => s.SeasonId == seasonId);
 
-        // Safely get episodes for the season - check if episodes dictionary exists and has the season
-        if (series.Episodes != null && series.Episodes.TryGetValue(seasonId, out var episodes) && episodes != null && episodes.Count > 0)
+        List<Tuple<SeriesStreamInfo, Season?, Episode>> result = new();
+
+        if (series.Episodes != null)
         {
-            return episodes.Select((Episode episode) => new Tuple<SeriesStreamInfo, Season?, Episode>(series, season, episode));
+            // First try to get episodes from dictionary by seasonId key
+            if (series.Episodes.TryGetValue(seasonId, out var episodes) && episodes != null && episodes.Count > 0)
+            {
+                foreach (var episode in episodes)
+                {
+                    result.Add(new Tuple<SeriesStreamInfo, Season?, Episode>(series, season, episode));
+                }
+            }
+
+            // Fallback: search all episodes in dictionary and filter by episode.Season property
+            // This handles cases where episodes might be stored under a different season ID key
+            // Only add episodes that weren't already added from the direct lookup
+            foreach (var kvp in series.Episodes)
+            {
+                if (kvp.Value != null && kvp.Key != seasonId) // Skip if we already checked this key
+                {
+                    foreach (var episode in kvp.Value)
+                    {
+                        // Match episodes by their Season property, not just the dictionary key
+                        if (episode.Season == seasonId)
+                        {
+                            // Avoid duplicates - check if episode already in result
+                            if (!result.Any(r => r.Item3.EpisodeId == episode.EpisodeId))
+                            {
+                                result.Add(new Tuple<SeriesStreamInfo, Season?, Episode>(series, season, episode));
+                            }
+                        }
+                    }
+                }
+            }
         }
 
-        return new List<Tuple<SeriesStreamInfo, Season?, Episode>>();
+        return result;
     }
 
     private static void StoreBytes(byte[] dst, int offset, int i)
@@ -460,6 +490,7 @@ public partial class StreamService(IXtreamClient xtreamClient)
     }
 
     // Matches tags in brackets [TAG] or pipe-delimited |TAG| (with optional spaces and Unicode pipe variants)
-    [GeneratedRegex(@"\[([^\]]+)\]|[|│┃｜]\s*([^|│┃｜]+?)\s*[|│┃｜]")]
+    // Pipe variants: | (U+007C), │ (U+2502), ┃ (U+2503), ｜ (U+FF5C)
+    [GeneratedRegex(@"\[([^\]]+)\]|(?:\||│|┃|｜)\s*([^|│┃｜]+?)\s*(?:\||│|┃|｜)")]
     private static partial Regex TagRegex();
 }
