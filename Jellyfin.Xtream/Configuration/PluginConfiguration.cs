@@ -78,9 +78,10 @@ public class PluginConfiguration : BasePluginConfiguration
 
     /// <summary>
     /// Gets or sets the cache expiration time in minutes for series data.
-    /// Default is 60 minutes (1 hour). Data is refreshed when this time expires or when configuration changes.
+    /// Default is 0 (no expiration). Cache refreshes on: manual trigger, config change, or plugin restart.
+    /// Set to a positive value (e.g., 60) to auto-expire cache after that many minutes.
     /// </summary>
-    public int SeriesCacheExpirationMinutes { get; set; } = 60;
+    public int SeriesCacheExpirationMinutes { get; set; } = 0;
 
     /// <summary>
     /// Gets or sets the channels displayed in Live TV.

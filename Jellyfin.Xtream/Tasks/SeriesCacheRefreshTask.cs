@@ -79,7 +79,15 @@ public class SeriesCacheRefreshTask : IScheduledTask
     /// <inheritdoc />
     public IEnumerable<TaskTriggerInfo> GetDefaultTriggers()
     {
-        // No default triggers - task is manual only
-        return Array.Empty<TaskTriggerInfo>();
+        // Default: refresh every 60 minutes
+        // Users can adjust this in Dashboard → Scheduled Tasks
+        return new[]
+        {
+            new TaskTriggerInfo
+            {
+                Type = MediaBrowser.Model.Tasks.TaskTriggerInfoType.IntervalTrigger,
+                IntervalTicks = TimeSpan.FromMinutes(60).Ticks
+            }
+        };
     }
 }

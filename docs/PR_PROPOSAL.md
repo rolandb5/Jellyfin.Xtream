@@ -6,10 +6,12 @@ This document outlines the proposed PR structure for contributing features and f
 
 This fork has added several features and bug fixes that could benefit the main repository:
 1. Flat Series View feature
-2. Flat VOD View feature  
+2. Flat VOD View feature
 3. Missing Episodes bug fix
 4. Unicode pipe character support in tag parsing
 5. Upfront caching with configurable expiration
+6. Graphical progress indicator for cache refresh (scheduled task + UI)
+7. JavaScript API compatibility fix for configuration page
 
 ## Proposed PR Structure
 
@@ -89,39 +91,74 @@ This fork has added several features and bug fixes that could benefit the main r
 
 ---
 
-### **PR 4: Feature - Upfront Caching with Configurable Expiration**
+### **PR 4: Feature - Upfront Caching with Progress Indicator**
 **Priority: Low (depends on series functionality being stable)**
 
 **Changes:**
+
+#### Core Caching Service
 - `Jellyfin.Xtream/Service/SeriesCacheService.cs` (new file)
   - Pre-fetches and caches all series, seasons, and episodes
-  - Configurable cache expiration time
+  - Configurable cache expiration time (default: 60 minutes)
+  - Progress tracking with status messages
+  - Concurrent refresh protection via `SemaphoreSlim`
+  - Methods: `RefreshCacheAsync()`, `GetStatus()`, `IsCachePopulated()`
+  - Implements `IDisposable` for proper resource cleanup
+
+#### Scheduled Task
+- `Jellyfin.Xtream/Tasks/SeriesCacheRefreshTask.cs` (new file)
+  - Implements `IScheduledTask` for Jellyfin's task system
+  - Appears in Dashboard → Scheduled Tasks as "Refresh Xtream Series Cache"
+  - Shows progress percentage during execution
+  - Can be triggered manually or scheduled
+
+#### API Endpoint
+- `Jellyfin.Xtream/Api/XtreamController.cs`
+  - Add `GET /Xtream/SeriesCacheStatus` endpoint
+  - Returns: `IsRefreshing`, `Progress`, `Status`, `StartTime`, `CompleteTime`, `IsCachePopulated`
+  - Enables real-time progress monitoring from UI or external tools
+
+#### Plugin Integration
 - `Jellyfin.Xtream/Plugin.cs`
-  - Initialize cache service
-  - Trigger cache refresh on plugin load and config changes
+  - Initialize `SeriesCacheService` with dependency injection
+  - Trigger cache refresh on plugin load (background task)
+  - Trigger cache refresh on configuration changes
+- `Jellyfin.Xtream/PluginServiceRegistrator.cs`
+  - Register `SeriesCacheRefreshTask` with Jellyfin's task system
+
+#### Configuration
 - `Jellyfin.Xtream/Configuration/PluginConfiguration.cs`
-  - Add `SeriesCacheExpirationMinutes` property (default: 60)
-- `Jellyfin.Xtream/SeriesChannel.cs`
-  - Use cached data with fallback to API calls
+  - Add `SeriesCacheExpirationMinutes` property (default: 60, range: 1-1440)
+
+#### UI - Graphical Progress Indicator
 - `Jellyfin.Xtream/Configuration/Web/XtreamSeries.html`
-  - Add input field for cache expiration (minutes)
+  - Add cache expiration input field (minutes)
+  - Add progress bar container with animated fill
+  - Add status text display (color-coded: blue=refreshing, green=complete, gray=idle)
 - `Jellyfin.Xtream/Configuration/Web/XtreamSeries.js`
-  - Handle cache expiration input
+  - Poll `/Xtream/SeriesCacheStatus` every 2 seconds
+  - Update progress bar and status text in real-time
+  - Use `Xtream.fetchJson()` for API compatibility (not raw `ApiClient.fetch`)
+  - Clean up polling interval on view hide
 
 **Why separate:**
-- Larger change (new service)
-- Performance feature
+- Larger change (new service + task + API + UI)
+- Performance/UX feature
 - Should be added after core features are stable
-- Can be optional/opt-in
+- Fully opt-in and non-breaking
 
 **Files changed:**
 - `Jellyfin.Xtream/Service/SeriesCacheService.cs` (new)
+- `Jellyfin.Xtream/Tasks/SeriesCacheRefreshTask.cs` (new)
+- `Jellyfin.Xtream/Api/XtreamController.cs`
 - `Jellyfin.Xtream/Plugin.cs`
+- `Jellyfin.Xtream/PluginServiceRegistrator.cs`
 - `Jellyfin.Xtream/Configuration/PluginConfiguration.cs`
-- `Jellyfin.Xtream/SeriesChannel.cs`
 - `Jellyfin.Xtream/Configuration/Web/XtreamSeries.html`
 - `Jellyfin.Xtream/Configuration/Web/XtreamSeries.js`
 - `build.yaml` (version bump)
+
+**Note:** During development, a JavaScript bug was discovered where `ApiClient.fetch()` with a raw URL string doesn't work correctly in Jellyfin's web interface. Must use `Xtream.fetchJson()` helper instead.
 
 ---
 
@@ -199,6 +236,22 @@ If fewer PRs are preferred:
 - Includes UI updates for configuration
 - Tested in production environment
 
+### JavaScript API Compatibility Note
+
+During development of the cache progress indicator, a Jellyfin JavaScript API quirk was discovered:
+
+**Issue:** `ApiClient.fetch('url-string')` doesn't work correctly in Jellyfin's web interface
+**Solution:** Use `ApiClient.fetch({ url: ApiClient.getUrl('path'), type: 'GET', dataType: 'json' })` or the helper function `fetchJson()` from `Xtream.js`
+
+This applies to all custom API endpoints called from plugin configuration pages. The `fetchJson` helper in `Xtream.js` handles this correctly:
+```javascript
+const fetchJson = (url) => ApiClient.fetch({
+  dataType: 'json',
+  type: 'GET',
+  url: ApiClient.getUrl(url),
+});
+```
+
 ---
 
 ## Next Steps
@@ -209,6 +262,17 @@ If fewer PRs are preferred:
 4. Test each PR independently
 5. Create PRs with detailed descriptions
 6. Submit in recommended order
+
+---
+
+## Version History
+
+| Date | Version | Changes |
+|------|---------|---------|
+| 2026-01-24 | v0.9.3.1 | Fixed JS API compatibility issue in XtreamSeries.js |
+| 2026-01-24 | v0.9.3.0 | Added graphical progress indicator for cache refresh |
+| 2026-01-23 | v0.9.2.x | Added upfront caching with configurable expiration |
+| 2026-01-22 | v0.9.1.x | Added flat view features, Unicode pipe support, episodes fix |
 
 ---
 

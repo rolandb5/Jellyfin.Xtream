@@ -89,14 +89,18 @@ public class SeriesCacheService : IDisposable
 
             try
             {
-                // Get configured cache expiration time (default 60 minutes)
+                // Get configured cache expiration time (0 = no expiration, default)
                 int cacheExpirationMinutes = Plugin.Instance.Configuration.SeriesCacheExpirationMinutes;
-                if (cacheExpirationMinutes <= 0)
+
+                // Create cache entry options - no expiration by default (0 or negative)
+                // Cache only refreshes on: manual trigger, config change, or plugin restart
+                MemoryCacheEntryOptions cacheOptions = new();
+                if (cacheExpirationMinutes > 0)
                 {
-                    cacheExpirationMinutes = 60; // Default to 1 hour if invalid
+                    cacheOptions.AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(cacheExpirationMinutes);
                 }
 
-                TimeSpan cacheExpiration = TimeSpan.FromMinutes(cacheExpirationMinutes);
+                // No expiration set means cache lives until evicted or cleared
 
                 // Fetch all categories
                 _currentStatus = "Fetching categories...";
@@ -104,7 +108,7 @@ public class SeriesCacheService : IDisposable
                 _logger?.LogInformation("Fetching series categories...");
                 IEnumerable<Category> categories = await _streamService.GetSeriesCategories(cancellationToken).ConfigureAwait(false);
                 List<Category> categoryList = categories.ToList();
-                _memoryCache.Set($"{cachePrefix}categories", categoryList, cacheExpiration);
+                _memoryCache.Set($"{cachePrefix}categories", categoryList, cacheOptions);
                 _logger?.LogInformation("Found {CategoryCount} categories", categoryList.Count);
 
                 int seriesCount = 0;
@@ -178,17 +182,17 @@ public class SeriesCacheService : IDisposable
                                 episodeCount += episodeList.Count;
 
                                 // Cache episodes for this season
-                                _memoryCache.Set($"{cachePrefix}episodes_{series.SeriesId}_{seasonId}", episodeList, cacheExpiration);
+                                _memoryCache.Set($"{cachePrefix}episodes_{series.SeriesId}_{seasonId}", episodeList, cacheOptions);
 
                                 // Cache season info
                                 Season? season = seriesStreamInfo.Seasons.FirstOrDefault(s => s.SeasonId == seasonId);
-                                _memoryCache.Set($"{cachePrefix}season_{series.SeriesId}_{seasonId}", season, cacheExpiration);
+                                _memoryCache.Set($"{cachePrefix}season_{series.SeriesId}_{seasonId}", season, cacheOptions);
                             }
 
                             // Cache series stream info
                             if (seriesStreamInfo != null)
                             {
-                                _memoryCache.Set($"{cachePrefix}seriesinfo_{series.SeriesId}", seriesStreamInfo, cacheExpiration);
+                                _memoryCache.Set($"{cachePrefix}seriesinfo_{series.SeriesId}", seriesStreamInfo, cacheOptions);
                             }
                         }
                         catch (Exception ex)

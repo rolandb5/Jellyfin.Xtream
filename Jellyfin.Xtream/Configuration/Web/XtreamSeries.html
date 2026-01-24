@@ -18,12 +18,8 @@
             When enabled, all series from selected categories appear directly in the library without category folders. Seasons and episodes remain organized under each series.
           </div>
         </div>
-        <div class="inputContainer">
-          <label class="inputLabel" for="SeriesCacheExpirationMinutes">Cache Expiration (minutes)</label>
-          <input is="emby-input" type="number" id="SeriesCacheExpirationMinutes" name="SeriesCacheExpirationMinutes" min="1" max="1440" />
-          <div class="fieldDescription">
-            How long to cache series data before refreshing. Default is 60 minutes (1 hour). Lower values mean fresher data but more API calls. Higher values reduce API calls but data may be stale longer.
-          </div>
+        <div class="fieldDescription" style="margin-bottom: 1em;">
+          <strong>Cache Refresh:</strong> Series data is cached for fast navigation. Cache refreshes automatically every 60 minutes (configurable in Dashboard → Scheduled Tasks → "Refresh Xtream Series Cache"). You can also trigger a manual refresh from Scheduled Tasks.
         </div>
         <div class="inputContainer" id="CacheStatusContainer" style="display: none;">
           <label class="inputLabel">Cache Refresh Status</label>

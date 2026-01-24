@@ -1,0 +1,85 @@
+# Cursor Rules for Jellyfin.Xtream Plugin
+
+> **Note:** This file contains detailed rules for Cursor AI. For general project context and quick reference, see `CLAUDE.md`. For comprehensive project documentation, see `docs/PROJECT_CONTEXT.md`.
+
+## Security & Privacy Rules
+
+### NEVER Commit Sensitive Information
+**CRITICAL**: Before suggesting any code changes or file modifications, check for and prevent committing:
+
+1. **Email Addresses**: 
+   - Personal/work emails (e.g., `user@domain.com`)
+   - Use placeholders: `your-email@example.com` or `YOUR_EMAIL`
+   - Exception: Only generic example emails in documentation
+
+2. **IP Addresses**:
+   - Private IPs (e.g., `192.168.x.x`, `10.x.x.x`, `172.16-31.x.x`)
+   - Use placeholders: `YOUR_JELLYFIN_HOST` or `192.168.1.XXX`
+   - Exception: Only in `.gitignore`d files or example templates
+
+3. **Passwords/Tokens/API Keys**:
+   - Any hardcoded passwords, tokens, or API keys
+   - Use placeholders: `YOUR_PASSWORD`, `YOUR_API_KEY`
+   - Use environment variables or configuration files (that are gitignored)
+
+4. **File Paths with Usernames**:
+   - Absolute paths containing usernames (e.g., `/Users/username/`, `/home/username/`)
+   - Use relative paths: `$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)`
+   - Or placeholders: `/path/to/repo`, `~/project/`
+
+5. **Hostnames/Domains**:
+   - Internal hostnames or domains
+   - Use placeholders: `your-server.local`, `example.com`
+
+### Pre-Commit Checklist
+Before suggesting a commit, verify:
+- [ ] No email addresses in code or documentation (except examples)
+- [ ] No IP addresses (except in gitignored files)
+- [ ] No passwords, tokens, or API keys
+- [ ] No absolute paths with usernames
+- [ ] Scripts use relative paths or environment variables
+- [ ] Example files use clear placeholders
+
+### File Patterns to Watch
+- `*.sh` scripts (especially deployment/configuration scripts)
+- `*.md` documentation files
+- `*.json` configuration files
+- `*.env` or `.env*` files (should be gitignored)
+- `*.config` files
+- Any file in `scripts/` directory
+
+### Safe Patterns to Use
+```bash
+# ✅ Good: Relative paths
+REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+# ✅ Good: Environment variables
+JELLYFIN_HOST="${JELLYFIN_HOST:-localhost}"
+
+# ✅ Good: Placeholders in examples
+# Replace YOUR_EMAIL with your actual email
+```
+
+### When Editing Files
+1. **Check existing content**: Scan for sensitive info before editing
+2. **Use placeholders**: Replace real values with placeholders
+3. **Suggest gitignore**: If a file contains sensitive info, suggest adding to `.gitignore`
+4. **Provide examples**: Create `.example` versions for files with sensitive data
+
+## Code Quality Rules
+
+### Build & Style
+- Follow existing code style (C# StyleCop rules)
+- Run `make check` before committing
+- Fix trailing whitespace automatically
+- Ensure `dotnet build` succeeds
+
+### Documentation
+- Update relevant docs when adding features
+- Use clear, descriptive commit messages
+- Document breaking changes
+
+### Git Workflow
+- Never force push to `master` without explicit user request
+- Create feature branches for significant changes
+- Keep commits focused and atomic
