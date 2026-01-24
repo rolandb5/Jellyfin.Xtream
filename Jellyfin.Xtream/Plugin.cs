@@ -23,11 +23,11 @@ using Jellyfin.Xtream.Service;
 using MediaBrowser.Common.Configuration;
 using MediaBrowser.Common.Plugins;
 using MediaBrowser.Model.Plugins;
+using System.Threading.Tasks;
 using MediaBrowser.Model.Serialization;
 using MediaBrowser.Model.Tasks;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
-using System.Threading.Tasks;
 
 namespace Jellyfin.Xtream;
 
@@ -48,7 +48,8 @@ public class Plugin : BasePlugin<PluginConfiguration>, IHasWebPages
     /// <param name="xtreamClient">Instance of the <see cref="IXtreamClient"/> interface.</param>
     /// <param name="memoryCache">Instance of the <see cref="IMemoryCache"/> interface.</param>
     /// <param name="logger">Instance of the <see cref="ILogger{Plugin}"/> interface.</param>
-    public Plugin(IApplicationPaths applicationPaths, IXmlSerializer xmlSerializer, ITaskManager taskManager, IXtreamClient xtreamClient, IMemoryCache memoryCache, ILogger<Plugin> logger)
+    /// <param name="loggerFactory">Instance of the <see cref="ILoggerFactory"/> interface.</param>
+    public Plugin(IApplicationPaths applicationPaths, IXmlSerializer xmlSerializer, ITaskManager taskManager, IXtreamClient xtreamClient, IMemoryCache memoryCache, ILogger<Plugin> logger, ILoggerFactory loggerFactory)
         : base(applicationPaths, xmlSerializer)
     {
         _instance = this;
@@ -61,8 +62,8 @@ public class Plugin : BasePlugin<PluginConfiguration>, IHasWebPages
         StreamService = new(xtreamClient);
         TaskService = new(taskManager);
         _logger = logger;
-        SeriesCacheService = new Service.SeriesCacheService(StreamService, memoryCache, logger);
-        
+        SeriesCacheService = new Service.SeriesCacheService(StreamService, memoryCache, loggerFactory.CreateLogger<Service.SeriesCacheService>());
+
         // Start cache refresh in background (don't await - let it run async)
         _ = Task.Run(async () =>
         {
