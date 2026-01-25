@@ -180,6 +180,8 @@ export default function (view) {
     }).catch((error) => {
       console.error('Failed to load series categories:', error);
       Dashboard.hideLoadingMsg();
+      // Clear any previous content/errors before showing new error
+      table.innerHTML = '';
       const errorRow = document.createElement('tr');
       const errorCell = document.createElement('td');
       errorCell.colSpan = 3;
