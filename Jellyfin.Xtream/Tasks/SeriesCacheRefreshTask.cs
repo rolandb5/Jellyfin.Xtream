@@ -23,6 +23,7 @@ namespace Jellyfin.Xtream.Tasks;
 
 /// <summary>
 /// Scheduled task for refreshing series cache with progress tracking.
+/// Runs every 10 minutes but only refreshes if the configured interval has passed.
 /// </summary>
 public class SeriesCacheRefreshTask : IScheduledTask
 {
@@ -34,7 +35,7 @@ public class SeriesCacheRefreshTask : IScheduledTask
     /// <summary>
     /// Gets the description of the task.
     /// </summary>
-    public string Description => "Pre-fetches and caches all series data (categories, series, seasons, episodes) for faster navigation.";
+    public string Description => "Checks if series cache needs refresh based on configured interval. Refresh frequency is controlled in plugin settings.";
 
     /// <summary>
     /// Gets the category of the task.
@@ -69,8 +70,28 @@ public class SeriesCacheRefreshTask : IScheduledTask
             return;
         }
 
-        // The SeriesCacheService will report progress through its own mechanism
-        // We just trigger the refresh and let it handle progress reporting
+        // Get configured refresh interval (default 60 minutes)
+        int refreshIntervalMinutes = Plugin.Instance.Configuration.SeriesCacheExpirationMinutes;
+        if (refreshIntervalMinutes <= 0)
+        {
+            refreshIntervalMinutes = 60;
+        }
+
+        // Check if enough time has passed since last refresh
+        var (_, _, _, _, lastRefreshComplete) = Plugin.Instance.SeriesCacheService.GetStatus();
+
+        if (lastRefreshComplete.HasValue)
+        {
+            TimeSpan timeSinceLastRefresh = DateTime.UtcNow - lastRefreshComplete.Value;
+            if (timeSinceLastRefresh.TotalMinutes < refreshIntervalMinutes)
+            {
+                // Not enough time has passed, skip this run
+                progress.Report(1.0);
+                return;
+            }
+        }
+
+        // Time to refresh
         await Plugin.Instance.SeriesCacheService.RefreshCacheAsync(progress, cancellationToken).ConfigureAwait(false);
     }
 
@@ -87,16 +108,19 @@ public class SeriesCacheRefreshTask : IScheduledTask
     /// <summary>
     /// Gets the default triggers for this task.
     /// </summary>
-    /// <returns>Default triggers (runs every 60 minutes).</returns>
+    /// <returns>Default triggers (checks every 10 minutes).</returns>
     public IEnumerable<TaskTriggerInfo> GetDefaultTriggers()
     {
-        // Default: Run every 60 minutes
+        // Run every 10 minutes as a check interval.
+        // The actual refresh only happens if the configured interval has passed.
+        // This allows the plugin setting to control refresh frequency without
+        // requiring users to manually update the scheduled task.
         return new[]
         {
             new TaskTriggerInfo
             {
                 Type = TaskTriggerInfoType.IntervalTrigger,
-                IntervalTicks = TimeSpan.FromMinutes(60).Ticks
+                IntervalTicks = TimeSpan.FromMinutes(10).Ticks
             }
         };
     }
