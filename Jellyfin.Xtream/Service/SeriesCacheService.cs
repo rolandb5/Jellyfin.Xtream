@@ -39,6 +39,7 @@ public class SeriesCacheService : IDisposable
     private string _currentStatus = "Idle";
     private DateTime? _lastRefreshStart;
     private DateTime? _lastRefreshComplete;
+    private CancellationTokenSource? _refreshCancellationTokenSource;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="SeriesCacheService"/> class.
@@ -87,6 +88,11 @@ public class SeriesCacheService : IDisposable
             _currentProgress = 0.0;
             _currentStatus = "Starting...";
             _lastRefreshStart = DateTime.UtcNow;
+
+            // Create a linked cancellation token source so we can cancel the refresh
+            _refreshCancellationTokenSource?.Dispose();
+            _refreshCancellationTokenSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+
             _logger?.LogInformation("Starting series data cache refresh");
 
             string cacheDataVersion = Plugin.Instance.CacheDataVersion;
@@ -109,7 +115,7 @@ public class SeriesCacheService : IDisposable
                 _currentStatus = "Fetching categories...";
                 progress?.Report(0.05);
                 _logger?.LogInformation("Fetching series categories...");
-                IEnumerable<Category> categories = await _streamService.GetSeriesCategories(cancellationToken).ConfigureAwait(false);
+                IEnumerable<Category> categories = await _streamService.GetSeriesCategories(_refreshCancellationTokenSource.Token).ConfigureAwait(false);
                 List<Category> categoryList = categories.ToList();
                 _memoryCache.Set($"{cachePrefix}categories", categoryList, cacheOptions);
                 _logger?.LogInformation("Found {CategoryCount} categories", categoryList.Count);
@@ -124,7 +130,7 @@ public class SeriesCacheService : IDisposable
                 // First pass: count total series for progress calculation
                 foreach (Category category in categoryList)
                 {
-                    IEnumerable<Series> seriesList = await _streamService.GetSeries(category.CategoryId, cancellationToken).ConfigureAwait(false);
+                    IEnumerable<Series> seriesList = await _streamService.GetSeries(category.CategoryId, _refreshCancellationTokenSource.Token).ConfigureAwait(false);
                     totalSeries += seriesList.Count();
                 }
 
@@ -136,7 +142,7 @@ public class SeriesCacheService : IDisposable
                     _logger?.LogInformation("Processing category {CategoryIndex}/{TotalCategories}: {CategoryName} (ID: {CategoryId})", categoryIndex, totalCategories, category.CategoryName, category.CategoryId);
                     progress?.Report(0.1 + (((categoryIndex - 1) * 0.8) / totalCategories)); // 10% for categories, 80% for series processing
 
-                    IEnumerable<Series> seriesList = await _streamService.GetSeries(category.CategoryId, cancellationToken).ConfigureAwait(false);
+                    IEnumerable<Series> seriesList = await _streamService.GetSeries(category.CategoryId, _refreshCancellationTokenSource.Token).ConfigureAwait(false);
                     List<Series> seriesListItems = seriesList.ToList();
                     _logger?.LogInformation("  Found {SeriesCount} series in category {CategoryName}", seriesListItems.Count, category.CategoryName);
 
@@ -164,7 +170,7 @@ public class SeriesCacheService : IDisposable
                         try
                         {
                             // Fetch seasons for this series
-                            IEnumerable<Tuple<SeriesStreamInfo, int>> seasons = await _streamService.GetSeasons(series.SeriesId, cancellationToken).ConfigureAwait(false);
+                            IEnumerable<Tuple<SeriesStreamInfo, int>> seasons = await _streamService.GetSeasons(series.SeriesId, _refreshCancellationTokenSource.Token).ConfigureAwait(false);
                             List<Tuple<SeriesStreamInfo, int>> seasonList = seasons.ToList();
 
                             SeriesStreamInfo? seriesStreamInfo = null;
@@ -179,7 +185,7 @@ public class SeriesCacheService : IDisposable
                                 seasonCount++;
 
                                 // Fetch episodes for this season
-                                IEnumerable<Tuple<SeriesStreamInfo, Season?, Episode>> episodes = await _streamService.GetEpisodes(series.SeriesId, seasonId, cancellationToken).ConfigureAwait(false);
+                                IEnumerable<Tuple<SeriesStreamInfo, Season?, Episode>> episodes = await _streamService.GetEpisodes(series.SeriesId, seasonId, _refreshCancellationTokenSource.Token).ConfigureAwait(false);
 
                                 List<Episode> episodeList = episodes.Select(e => e.Item3).ToList();
                                 episodeCount += episodeList.Count;
@@ -212,6 +218,11 @@ public class SeriesCacheService : IDisposable
                 _currentStatus = $"Completed: {seriesCount} series, {seasonCount} seasons, {episodeCount} episodes";
                 _lastRefreshComplete = DateTime.UtcNow;
                 _logger?.LogInformation("Cache refresh completed: {SeriesCount} series, {SeasonCount} seasons, {EpisodeCount} episodes across {CategoryCount} categories", seriesCount, seasonCount, episodeCount, totalCategories);
+            }
+            catch (OperationCanceledException)
+            {
+                _logger?.LogInformation("Cache refresh cancelled");
+                _currentStatus = "Cancelled";
             }
             catch (Exception ex)
             {
@@ -343,6 +354,18 @@ public class SeriesCacheService : IDisposable
     }
 
     /// <summary>
+    /// Cancels the currently running cache refresh operation.
+    /// </summary>
+    public void CancelRefresh()
+    {
+        if (_isRefreshing && _refreshCancellationTokenSource != null)
+        {
+            _logger?.LogInformation("Cancelling cache refresh...");
+            _refreshCancellationTokenSource.Cancel();
+        }
+    }
+
+    /// <summary>
     /// Invalidates all cached data by incrementing the cache version.
     /// Old cache entries will remain in memory but won't be accessed.
     /// </summary>
@@ -379,6 +402,7 @@ public class SeriesCacheService : IDisposable
     {
         if (disposing)
         {
+            _refreshCancellationTokenSource?.Dispose();
             _refreshLock?.Dispose();
         }
     }
