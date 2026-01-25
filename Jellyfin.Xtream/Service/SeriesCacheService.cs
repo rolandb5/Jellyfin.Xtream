@@ -33,6 +33,7 @@ public class SeriesCacheService : IDisposable
     private readonly IMemoryCache _memoryCache;
     private readonly ILogger<SeriesCacheService>? _logger;
     private readonly SemaphoreSlim _refreshLock = new(1, 1);
+    private int _cacheVersion = 0;
     private bool _isRefreshing = false;
     private double _currentProgress = 0.0;
     private string _currentStatus = "Idle";
@@ -51,6 +52,11 @@ public class SeriesCacheService : IDisposable
         _memoryCache = memoryCache;
         _logger = logger;
     }
+
+    /// <summary>
+    /// Gets the current cache key prefix.
+    /// </summary>
+    private string CachePrefix => $"series_cache_{Plugin.Instance.DataVersion}_v{_cacheVersion}_";
 
     /// <summary>
     /// Pre-fetches and caches all series data (categories, series, seasons, episodes).
@@ -82,21 +88,16 @@ public class SeriesCacheService : IDisposable
             _logger?.LogInformation("Starting series data cache refresh");
 
             string dataVersion = Plugin.Instance.DataVersion;
-            string cachePrefix = $"series_cache_{dataVersion}_";
+            string cachePrefix = $"series_cache_{dataVersion}_v{_cacheVersion}_";
 
             // Clear old cache entries
             ClearCache(dataVersion);
 
             try
             {
-                // Get configured cache expiration time (default 60 minutes)
-                int cacheExpirationMinutes = Plugin.Instance.Configuration.SeriesCacheExpirationMinutes;
-                if (cacheExpirationMinutes <= 0)
-                {
-                    cacheExpirationMinutes = 60; // Default to 1 hour if invalid
-                }
-
-                TimeSpan cacheExpiration = TimeSpan.FromMinutes(cacheExpirationMinutes);
+                // Cache entries never expire - they persist until refreshed or Jellyfin restarts
+                // Refresh frequency is controlled by the scheduled task (default: every 60 minutes)
+                MemoryCacheEntryOptions cacheOptions = new();
 
                 // Fetch all categories
                 _currentStatus = "Fetching categories...";
@@ -104,7 +105,7 @@ public class SeriesCacheService : IDisposable
                 _logger?.LogInformation("Fetching series categories...");
                 IEnumerable<Category> categories = await _streamService.GetSeriesCategories(cancellationToken).ConfigureAwait(false);
                 List<Category> categoryList = categories.ToList();
-                _memoryCache.Set($"{cachePrefix}categories", categoryList, cacheExpiration);
+                _memoryCache.Set($"{cachePrefix}categories", categoryList, cacheOptions);
                 _logger?.LogInformation("Found {CategoryCount} categories", categoryList.Count);
 
                 int seriesCount = 0;
@@ -178,17 +179,17 @@ public class SeriesCacheService : IDisposable
                                 episodeCount += episodeList.Count;
 
                                 // Cache episodes for this season
-                                _memoryCache.Set($"{cachePrefix}episodes_{series.SeriesId}_{seasonId}", episodeList, cacheExpiration);
+                                _memoryCache.Set($"{cachePrefix}episodes_{series.SeriesId}_{seasonId}", episodeList, cacheOptions);
 
                                 // Cache season info
                                 Season? season = seriesStreamInfo.Seasons.FirstOrDefault(s => s.SeasonId == seasonId);
-                                _memoryCache.Set($"{cachePrefix}season_{series.SeriesId}_{seasonId}", season, cacheExpiration);
+                                _memoryCache.Set($"{cachePrefix}season_{series.SeriesId}_{seasonId}", season, cacheOptions);
                             }
 
                             // Cache series stream info
                             if (seriesStreamInfo != null)
                             {
-                                _memoryCache.Set($"{cachePrefix}seriesinfo_{series.SeriesId}", seriesStreamInfo, cacheExpiration);
+                                _memoryCache.Set($"{cachePrefix}seriesinfo_{series.SeriesId}", seriesStreamInfo, cacheOptions);
                             }
                         }
                         catch (Exception ex)
@@ -232,7 +233,7 @@ public class SeriesCacheService : IDisposable
     {
         try
         {
-            string cacheKey = $"series_cache_{Plugin.Instance.DataVersion}_categories";
+            string cacheKey = $"{CachePrefix}categories";
             if (_memoryCache.TryGetValue(cacheKey, out List<Category>? categories) && categories != null)
             {
                 return categories;
@@ -255,7 +256,7 @@ public class SeriesCacheService : IDisposable
     {
         try
         {
-            string cacheKey = $"series_cache_{Plugin.Instance.DataVersion}_seriesinfo_{seriesId}";
+            string cacheKey = $"{CachePrefix}seriesinfo_{seriesId}";
             return _memoryCache.TryGetValue(cacheKey, out SeriesStreamInfo? info) ? info : null;
         }
         catch
@@ -274,7 +275,7 @@ public class SeriesCacheService : IDisposable
     {
         try
         {
-            string cacheKey = $"series_cache_{Plugin.Instance.DataVersion}_season_{seriesId}_{seasonId}";
+            string cacheKey = $"{CachePrefix}season_{seriesId}_{seasonId}";
             return _memoryCache.TryGetValue(cacheKey, out Season? season) ? season : null;
         }
         catch
@@ -293,7 +294,7 @@ public class SeriesCacheService : IDisposable
     {
         try
         {
-            string cacheKey = $"series_cache_{Plugin.Instance.DataVersion}_episodes_{seriesId}_{seasonId}";
+            string cacheKey = $"{CachePrefix}episodes_{seriesId}_{seasonId}";
             if (_memoryCache.TryGetValue(cacheKey, out List<Episode>? episodes) && episodes != null)
             {
                 return episodes;
@@ -326,13 +327,26 @@ public class SeriesCacheService : IDisposable
     {
         try
         {
-            string cacheKey = $"series_cache_{Plugin.Instance.DataVersion}_categories";
+            string cacheKey = $"{CachePrefix}categories";
             return _memoryCache.TryGetValue(cacheKey, out _);
         }
         catch
         {
             return false;
         }
+    }
+
+    /// <summary>
+    /// Invalidates all cached data by incrementing the cache version.
+    /// Old cache entries will remain in memory but won't be accessed.
+    /// </summary>
+    public void InvalidateCache()
+    {
+        _cacheVersion++;
+        _currentProgress = 0.0;
+        _currentStatus = "Cache invalidated";
+        _lastRefreshComplete = null;
+        _logger?.LogInformation("Cache invalidated (version incremented to {Version})", _cacheVersion);
     }
 
     /// <summary>
