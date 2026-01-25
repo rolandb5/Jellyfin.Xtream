@@ -18,12 +18,24 @@
             When enabled, all series from selected categories appear directly in the library without category folders. Seasons and episodes remain organized under each series.
           </div>
         </div>
+        <div class="sectionTitleContainer flex align-items-center" style="margin-top: 1em;">
+          <h2 class="sectionTitle">Cache Settings</h2>
+        </div>
         <div class="inputContainer">
-          <label class="inputLabel" for="SeriesCacheExpirationMinutes">Cache Expiration (minutes)</label>
-          <input is="emby-input" type="number" id="SeriesCacheExpirationMinutes" name="SeriesCacheExpirationMinutes" min="1" max="1440" />
+          <label class="inputLabel" for="SeriesCacheRefreshMinutes">Refresh Frequency (minutes)</label>
+          <input is="emby-input" type="number" id="SeriesCacheRefreshMinutes" name="SeriesCacheRefreshMinutes" min="10" max="1440" />
           <div class="fieldDescription">
-            How long to cache series data before refreshing. Default is 60 minutes (1 hour). Lower values mean fresher data but more API calls. Higher values reduce API calls but data may be stale longer.
+            How often to automatically refresh the cache. Default is 60 minutes. Also configurable in Dashboard → Scheduled Tasks.
           </div>
+        </div>
+        <div class="inputContainer" style="display: flex; gap: 10px; margin-bottom: 1em;">
+          <button is="emby-button" type="button" id="RefreshCacheBtn" class="raised emby-button">
+            <span>Refresh Now</span>
+          </button>
+          <button is="emby-button" type="button" id="ClearCacheBtn" class="raised emby-button" style="background-color: #c25;"
+            title="Clears all cached data. Next refresh will fetch everything from scratch.">
+            <span>Clear Cache</span>
+          </button>
         </div>
         <div class="inputContainer" id="CacheStatusContainer" style="display: none;">
           <label class="inputLabel">Cache Refresh Status</label>

@@ -11,38 +11,110 @@ export default function (view) {
     const getConfig = ApiClient.getPluginConfiguration(pluginId);
     const visible = view.querySelector("#Visible");
     const flattenSeriesView = view.querySelector("#FlattenSeriesView");
-    const cacheExpirationMinutes = view.querySelector("#SeriesCacheExpirationMinutes");
+    const cacheRefreshMinutes = view.querySelector("#SeriesCacheRefreshMinutes");
+    const refreshCacheBtn = view.querySelector("#RefreshCacheBtn");
+    const clearCacheBtn = view.querySelector("#ClearCacheBtn");
     const cacheStatusContainer = view.querySelector("#CacheStatusContainer");
     const cacheProgressFill = view.querySelector("#CacheProgressFill");
     const cacheStatusText = view.querySelector("#CacheStatusText");
-    
+
     getConfig.then((config) => {
       visible.checked = config.IsSeriesVisible;
       flattenSeriesView.checked = config.FlattenSeriesView || false;
-      cacheExpirationMinutes.value = config.SeriesCacheExpirationMinutes || 60;
+      cacheRefreshMinutes.value = config.SeriesCacheExpirationMinutes || 60;
+    });
+
+    // Refresh Now button handler
+    refreshCacheBtn.addEventListener('click', () => {
+      refreshCacheBtn.disabled = true;
+      refreshCacheBtn.querySelector('span').textContent = 'Starting...';
+
+      fetch(ApiClient.getUrl('Xtream/SeriesCacheRefresh'), {
+        method: 'POST',
+        headers: ApiClient.defaultRequestHeaders()
+      })
+        .then(response => response.json())
+        .then(result => {
+          if (result.Success) {
+            cacheStatusText.textContent = 'Refresh started...';
+            cacheStatusText.style.color = '#00a4dc';
+            cacheStatusContainer.style.display = 'block';
+          } else {
+            Dashboard.alert(result.Message || 'Failed to start refresh');
+          }
+        })
+        .catch(err => {
+          console.error('Failed to trigger cache refresh:', err);
+          Dashboard.alert('Failed to trigger cache refresh');
+        })
+        .finally(() => {
+          refreshCacheBtn.disabled = false;
+          refreshCacheBtn.querySelector('span').textContent = 'Refresh Now';
+        });
+    });
+
+    // Clear Cache button handler
+    clearCacheBtn.addEventListener('click', () => {
+      if (!confirm('Are you sure you want to clear the cache? Next refresh will fetch all data from scratch.')) {
+        return;
+      }
+
+      clearCacheBtn.disabled = true;
+      clearCacheBtn.querySelector('span').textContent = 'Clearing...';
+
+      fetch(ApiClient.getUrl('Xtream/SeriesCacheClear'), {
+        method: 'POST',
+        headers: ApiClient.defaultRequestHeaders()
+      })
+        .then(response => response.json())
+        .then(result => {
+          if (result.Success) {
+            Dashboard.alert('Cache cleared successfully');
+            cacheStatusText.textContent = 'Cache cleared';
+            cacheStatusText.style.color = '#a0a0a0';
+            cacheProgressFill.style.width = '0%';
+          } else {
+            Dashboard.alert(result.Message || 'Failed to clear cache');
+          }
+        })
+        .catch(err => {
+          console.error('Failed to clear cache:', err);
+          Dashboard.alert('Failed to clear cache');
+        })
+        .finally(() => {
+          clearCacheBtn.disabled = false;
+          clearCacheBtn.querySelector('span').textContent = 'Clear Cache';
+        });
     });
 
     // Poll cache status every 2 seconds
     let statusPollInterval;
     function updateCacheStatus() {
-      ApiClient.fetch('Xtream/SeriesCacheStatus')
-        .then((response) => response.json())
+      Xtream.fetchJson('Xtream/SeriesCacheStatus')
         .then((status) => {
           if (status.IsRefreshing || status.Progress > 0 || status.IsCachePopulated) {
             cacheStatusContainer.style.display = 'block';
             const progressPercent = Math.round(status.Progress * 100);
             cacheProgressFill.style.width = progressPercent + '%';
             cacheStatusText.textContent = status.Status || 'Idle';
-            
+
             if (status.IsRefreshing) {
               cacheStatusText.style.color = '#00a4dc';
-            } else if (status.Progress >= 1.0) {
-              cacheStatusText.style.color = '#4caf50';
+              refreshCacheBtn.disabled = true;
+              clearCacheBtn.disabled = true;
             } else {
-              cacheStatusText.style.color = '#a0a0a0';
+              refreshCacheBtn.disabled = false;
+              clearCacheBtn.disabled = false;
+              if (status.Progress >= 1.0) {
+                cacheStatusText.style.color = '#4caf50';
+              } else {
+                cacheStatusText.style.color = '#a0a0a0';
+              }
             }
           } else {
             cacheStatusContainer.style.display = 'none';
+            refreshCacheBtn.disabled = false;
+            clearCacheBtn.disabled = false;
           }
         })
         .catch(() => {
@@ -73,7 +145,7 @@ export default function (view) {
         ApiClient.getPluginConfiguration(pluginId).then((config) => {
           config.IsSeriesVisible = visible.checked;
           config.FlattenSeriesView = flattenSeriesView.checked;
-          config.SeriesCacheExpirationMinutes = parseInt(cacheExpirationMinutes.value, 10) || 60;
+          config.SeriesCacheExpirationMinutes = parseInt(cacheRefreshMinutes.value, 10) || 60;
           config.Series = data;
           ApiClient.updatePluginConfiguration(pluginId, config).then((result) => {
             Dashboard.processPluginConfigurationUpdateResult(result);

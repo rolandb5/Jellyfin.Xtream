@@ -221,4 +221,44 @@ public class XtreamController(IXtreamClient xtreamClient) : ControllerBase
             IsCachePopulated = Plugin.Instance.SeriesCacheService.IsCachePopulated()
         });
     }
+
+    /// <summary>
+    /// Trigger an immediate cache refresh.
+    /// </summary>
+    /// <param name="cancellationToken">The cancellation token for cancelling requests.</param>
+    /// <returns>Status of the refresh operation.</returns>
+    [Authorize(Policy = "RequiresElevation")]
+    [HttpPost("SeriesCacheRefresh")]
+    public async Task<ActionResult<object>> TriggerCacheRefresh(CancellationToken cancellationToken)
+    {
+        var (isRefreshing, _, _, _, _) = Plugin.Instance.SeriesCacheService.GetStatus();
+        if (isRefreshing)
+        {
+            return Ok(new { Success = false, Message = "Cache refresh already in progress" });
+        }
+
+        // Start refresh in background (don't await)
+        _ = Plugin.Instance.SeriesCacheService.RefreshCacheAsync(null, cancellationToken);
+
+        return Ok(new { Success = true, Message = "Cache refresh started" });
+    }
+
+    /// <summary>
+    /// Clear the series cache completely.
+    /// </summary>
+    /// <returns>Status of the clear operation.</returns>
+    [Authorize(Policy = "RequiresElevation")]
+    [HttpPost("SeriesCacheClear")]
+    public ActionResult<object> ClearSeriesCache()
+    {
+        var (isRefreshing, _, _, _, _) = Plugin.Instance.SeriesCacheService.GetStatus();
+        if (isRefreshing)
+        {
+            return Ok(new { Success = false, Message = "Cannot clear cache while refresh is in progress" });
+        }
+
+        Plugin.Instance.SeriesCacheService.InvalidateCache();
+
+        return Ok(new { Success = true, Message = "Cache cleared. Next refresh will fetch all data." });
+    }
 }
