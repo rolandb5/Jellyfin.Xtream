@@ -77,15 +77,23 @@ export default function (view) {
 
     // Clear Cache button handler
     clearCacheBtn.addEventListener('click', () => {
-      // Check if currently refreshing
-      if (clearCacheBtn.disabled) {
-        Dashboard.alert('Cache refresh is currently in progress. Please wait for it to complete before clearing the cache.');
-        return;
-      }
+      // Check if a refresh is currently running
+      Xtream.fetchJson('Xtream/SeriesCacheStatus')
+        .then((status) => {
+          let confirmMessage = 'Are you sure you want to clear the cache? Next refresh will fetch all data from scratch.';
+          if (status.IsRefreshing) {
+            confirmMessage = 'A cache refresh is currently in progress. Clearing the cache will stop the refresh. Are you sure you want to continue?';
+          }
 
-      if (!confirm('Are you sure you want to clear the cache? Next refresh will fetch all data from scratch.')) {
-        return;
-      }
+          if (!confirm(confirmMessage)) {
+            return;
+          }
+
+          clearCache();
+        });
+    });
+
+    function clearCache() {
 
       clearCacheBtn.disabled = true;
       clearCacheBtn.querySelector('span').textContent = 'Clearing...';
@@ -118,7 +126,7 @@ export default function (view) {
           clearCacheBtn.disabled = false;
           clearCacheBtn.querySelector('span').textContent = 'Clear Cache';
         });
-    });
+    }
 
     // Poll cache status every 2 seconds
     let statusPollInterval;
@@ -134,10 +142,9 @@ export default function (view) {
             if (status.IsRefreshing) {
               cacheStatusText.style.color = '#00a4dc';
               refreshCacheBtn.disabled = true;
-              clearCacheBtn.disabled = true;
+              // Clear Cache button stays enabled - it will cancel the refresh
             } else {
               refreshCacheBtn.disabled = false;
-              clearCacheBtn.disabled = false;
               if (status.Progress >= 1.0) {
                 cacheStatusText.style.color = '#4caf50';
               } else {
@@ -147,7 +154,6 @@ export default function (view) {
           } else {
             cacheStatusContainer.style.display = 'none';
             refreshCacheBtn.disabled = false;
-            clearCacheBtn.disabled = false;
           }
         })
         .catch(() => {

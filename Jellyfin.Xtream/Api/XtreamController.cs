@@ -254,11 +254,14 @@ public class XtreamController(IXtreamClient xtreamClient) : ControllerBase
         var (isRefreshing, _, _, _, _) = Plugin.Instance.SeriesCacheService.GetStatus();
         if (isRefreshing)
         {
-            return Ok(new { Success = false, Message = "Cannot clear cache while refresh is in progress" });
+            // Cancel the running refresh before clearing
+            Plugin.Instance.SeriesCacheService.CancelRefresh();
+            // Give it a moment to cancel
+            System.Threading.Thread.Sleep(500);
         }
 
         Plugin.Instance.SeriesCacheService.InvalidateCache();
 
-        return Ok(new { Success = true, Message = "Cache cleared. Next refresh will fetch all data." });
+        return Ok(new { Success = true, Message = "Cache cleared. Refresh was cancelled." });
     }
 }
