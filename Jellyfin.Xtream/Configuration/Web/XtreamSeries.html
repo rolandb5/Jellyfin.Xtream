@@ -21,30 +21,41 @@
         <div class="sectionTitleContainer flex align-items-center" style="margin-top: 1em;">
           <h2 class="sectionTitle">Cache Settings</h2>
         </div>
-        <div class="inputContainer">
-          <label class="inputLabel" for="SeriesCacheRefreshMinutes">Refresh Frequency (minutes)</label>
-          <input is="emby-input" type="number" id="SeriesCacheRefreshMinutes" name="SeriesCacheRefreshMinutes" min="10" max="1440" />
+        <div class="checkboxContainer checkboxContainer-withDescription">
+          <label>
+            <input is="emby-checkbox" id="EnableCaching" name="EnableCaching" type="checkbox" />
+            <span>Enable Series Caching</span>
+          </label>
           <div class="fieldDescription">
-            How often to automatically refresh the cache (default: 60 minutes, minimum: 10). This setting syncs with Dashboard → Scheduled Tasks.
+            Pre-fetch and cache all series data for faster navigation. When disabled, data is fetched on-demand from the Xtream server.
           </div>
         </div>
-        <div class="inputContainer" style="display: flex; gap: 10px; margin-bottom: 1em;">
-          <button is="emby-button" type="button" id="RefreshCacheBtn" class="raised emby-button">
-            <span>Refresh Now</span>
-          </button>
-          <button is="emby-button" type="button" id="ClearCacheBtn" class="raised emby-button" style="background-color: #c25;"
-            title="Clears all cached data. Next refresh will fetch everything from scratch.">
-            <span>Clear Cache</span>
-          </button>
-        </div>
-        <div class="inputContainer" id="CacheStatusContainer" style="display: none;">
-          <label class="inputLabel">Cache Refresh Status</label>
-          <div id="CacheProgressBar" style="width: 100%; height: 20px; background-color: #2a2a2a; border-radius: 4px; overflow: hidden; margin: 8px 0;">
-            <div id="CacheProgressFill" style="height: 100%; background-color: #00a4dc; width: 0%; transition: width 0.3s ease;"></div>
+        <div id="CacheOptionsContainer" style="display: none;">
+          <div class="inputContainer">
+            <label class="inputLabel" for="SeriesCacheRefreshMinutes">Refresh Frequency (minutes)</label>
+            <input is="emby-input" type="number" id="SeriesCacheRefreshMinutes" name="SeriesCacheRefreshMinutes" min="10" max="1440" />
+            <div class="fieldDescription">
+              How often to automatically refresh the cache (default: 60 minutes, minimum: 10). This setting syncs with Dashboard → Scheduled Tasks.
+            </div>
           </div>
-          <div id="CacheStatusText" style="color: #a0a0a0; font-size: 0.9em; margin-top: 4px;">Idle</div>
-          <div class="fieldDescription">
-            Current cache refresh progress. You can also view this in Dashboard → Scheduled Tasks → "Refresh Xtream Series Cache".
+          <div class="inputContainer" style="display: flex; gap: 10px; margin-bottom: 1em;">
+            <button is="emby-button" type="button" id="RefreshCacheBtn" class="raised emby-button">
+              <span>Refresh Now</span>
+            </button>
+            <button is="emby-button" type="button" id="ClearCacheBtn" class="raised emby-button" style="background-color: #c25;"
+              title="Clears all cached data. Next refresh will fetch everything from scratch.">
+              <span>Clear Cache</span>
+            </button>
+          </div>
+          <div class="inputContainer" id="CacheStatusContainer" style="display: none;">
+            <label class="inputLabel">Cache Refresh Status</label>
+            <div id="CacheProgressBar" style="width: 100%; height: 20px; background-color: #2a2a2a; border-radius: 4px; overflow: hidden; margin: 8px 0;">
+              <div id="CacheProgressFill" style="height: 100%; background-color: #00a4dc; width: 0%; transition: width 0.3s ease;"></div>
+            </div>
+            <div id="CacheStatusText" style="color: #a0a0a0; font-size: 0.9em; margin-top: 4px;">Idle</div>
+            <div class="fieldDescription">
+              Current cache refresh progress. You can also view this in Dashboard → Scheduled Tasks → "Refresh Xtream Series Cache".
+            </div>
           </div>
         </div>
         <div class="sectionTitleContainer flex align-items-center">

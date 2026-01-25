@@ -11,6 +11,8 @@ export default function (view) {
     const getConfig = ApiClient.getPluginConfiguration(pluginId);
     const visible = view.querySelector("#Visible");
     const flattenSeriesView = view.querySelector("#FlattenSeriesView");
+    const enableCaching = view.querySelector("#EnableCaching");
+    const cacheOptionsContainer = view.querySelector("#CacheOptionsContainer");
     const cacheRefreshMinutes = view.querySelector("#SeriesCacheRefreshMinutes");
     const refreshCacheBtn = view.querySelector("#RefreshCacheBtn");
     const clearCacheBtn = view.querySelector("#ClearCacheBtn");
@@ -18,10 +20,19 @@ export default function (view) {
     const cacheProgressFill = view.querySelector("#CacheProgressFill");
     const cacheStatusText = view.querySelector("#CacheStatusText");
 
+    // Toggle cache options visibility
+    function updateCacheOptionsVisibility() {
+      cacheOptionsContainer.style.display = enableCaching.checked ? 'block' : 'none';
+    }
+
+    enableCaching.addEventListener('change', updateCacheOptionsVisibility);
+
     getConfig.then((config) => {
       visible.checked = config.IsSeriesVisible;
       flattenSeriesView.checked = config.FlattenSeriesView || false;
+      enableCaching.checked = config.EnableSeriesCaching !== false; // Default to true for backwards compatibility
       cacheRefreshMinutes.value = config.SeriesCacheExpirationMinutes || 60;
+      updateCacheOptionsVisibility();
     });
 
     // Refresh Now button handler
@@ -155,6 +166,7 @@ export default function (view) {
         ApiClient.getPluginConfiguration(pluginId).then((config) => {
           config.IsSeriesVisible = visible.checked;
           config.FlattenSeriesView = flattenSeriesView.checked;
+          config.EnableSeriesCaching = enableCaching.checked;
           config.SeriesCacheExpirationMinutes = parseInt(cacheRefreshMinutes.value, 10) || 60;
           config.Series = data;
           ApiClient.updatePluginConfiguration(pluginId, config).then((result) => {

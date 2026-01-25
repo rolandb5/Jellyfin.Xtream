@@ -78,6 +78,12 @@ public class PluginConfiguration : BasePluginConfiguration
     public bool FlattenVodView { get; set; } = false;
 
     /// <summary>
+    /// Gets or sets a value indicating whether series caching is enabled.
+    /// When enabled, series data is pre-fetched and cached for faster navigation.
+    /// </summary>
+    public bool EnableSeriesCaching { get; set; } = true;
+
+    /// <summary>
     /// Gets or sets the cache expiration time in minutes for series data.
     /// Default is 60 minutes (1 hour). Data is refreshed when this time expires or when configuration changes.
     /// </summary>

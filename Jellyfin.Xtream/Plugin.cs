@@ -65,8 +65,9 @@ public class Plugin : BasePlugin<PluginConfiguration>, IHasWebPages
         SeriesCacheService = new Service.SeriesCacheService(StreamService, memoryCache, loggerFactory.CreateLogger<Service.SeriesCacheService>());
 
         // Start cache refresh in background (don't await - let it run async)
-        // Only refresh if credentials are configured
-        if (!string.IsNullOrEmpty(Configuration.BaseUrl) &&
+        // Only refresh if caching is enabled and credentials are configured
+        if (Configuration.EnableSeriesCaching &&
+            !string.IsNullOrEmpty(Configuration.BaseUrl) &&
             Configuration.BaseUrl != "https://example.com" &&
             !string.IsNullOrEmpty(Configuration.Username))
         {
@@ -81,6 +82,10 @@ public class Plugin : BasePlugin<PluginConfiguration>, IHasWebPages
                     _logger.LogError(ex, "Failed to initialize series cache");
                 }
             });
+        }
+        else if (!Configuration.EnableSeriesCaching)
+        {
+            _logger.LogInformation("Skipping initial cache refresh - caching is disabled");
         }
         else
         {
@@ -183,8 +188,9 @@ public class Plugin : BasePlugin<PluginConfiguration>, IHasWebPages
         }
 
         // Refresh series cache in background when configuration changes
-        // Only refresh if credentials are configured
-        if (!string.IsNullOrEmpty(Configuration.BaseUrl) &&
+        // Only refresh if caching is enabled and credentials are configured
+        if (Configuration.EnableSeriesCaching &&
+            !string.IsNullOrEmpty(Configuration.BaseUrl) &&
             Configuration.BaseUrl != "https://example.com" &&
             !string.IsNullOrEmpty(Configuration.Username))
         {
@@ -199,6 +205,11 @@ public class Plugin : BasePlugin<PluginConfiguration>, IHasWebPages
                     _logger.LogError(ex, "Failed to refresh series cache after configuration update");
                 }
             });
+        }
+        else if (!Configuration.EnableSeriesCaching)
+        {
+            // Clear cache when caching is disabled
+            SeriesCacheService.InvalidateCache();
         }
 
         // Force a refresh of TV guide on configuration update.
