@@ -31,7 +31,34 @@ This fork has added several features and bug fixes that could benefit the main r
 
 ---
 
-### **PR 2: Enhancement - Unicode Pipe Character Support in Tag Parsing**
+### **PR 2: Bug Fix - Configuration UI Error Handling**
+**Priority: High**
+
+**Changes:**
+- `Jellyfin.Xtream/Configuration/Web/XtreamSeries.js` - Error handling improvements
+  - Clear table before showing error to prevent stacking duplicate messages
+  - Errors properly cleared when credentials are successfully configured
+- `Jellyfin.Xtream/Configuration/Web/XtreamVod.js` - Added error handling
+  - Previously failed silently without showing any error messages
+  - Now shows helpful error message with troubleshooting steps
+- `Jellyfin.Xtream/Configuration/Web/XtreamLive.js` - Added error handling
+  - Previously failed silently without showing any error messages
+  - Now shows helpful error message with troubleshooting steps
+
+**Why separate:**
+- Improves user experience when credentials are not configured
+- Prevents confusing UI behavior (stacking errors)
+- Makes it easier to troubleshoot configuration issues
+- Low risk, high value for all users
+
+**Files changed:**
+- `Jellyfin.Xtream/Configuration/Web/XtreamSeries.js`
+- `Jellyfin.Xtream/Configuration/Web/XtreamVod.js`
+- `Jellyfin.Xtream/Configuration/Web/XtreamLive.js`
+
+---
+
+### **PR 3: Enhancement - Unicode Pipe Character Support in Tag Parsing**
 **Priority: Medium**
 
 **Changes:**
@@ -49,7 +76,7 @@ This fork has added several features and bug fixes that could benefit the main r
 
 ---
 
-### **PR 3: Feature - Flat View (Series + VOD)**
+### **PR 4: Feature - Flat View (Series + VOD)**
 **Priority: Medium**
 
 **Changes:**
@@ -89,7 +116,7 @@ This fork has added several features and bug fixes that could benefit the main r
 
 ---
 
-### **PR 4: Feature - Upfront Caching with Configurable Expiration**
+### **PR 5: Feature - Upfront Caching with Configurable Expiration**
 **Priority: Low (depends on series functionality being stable)**
 
 **Changes:**
@@ -128,9 +155,10 @@ This fork has added several features and bug fixes that could benefit the main r
 ## PR Order Recommendation
 
 1. **PR 1: Missing Episodes Fix** (Critical bug fix)
-2. **PR 2: Unicode Pipe Support** (Small enhancement)
-3. **PR 3: Flat View Features** (Main feature)
-4. **PR 4: Upfront Caching** (Performance feature)
+2. **PR 2: Configuration UI Error Handling** (High priority UX fix)
+3. **PR 3: Unicode Pipe Support** (Small enhancement)
+4. **PR 4: Flat View Features** (Main feature)
+5. **PR 5: Upfront Caching** (Performance feature)
 
 ---
 
@@ -179,15 +207,15 @@ This fork has added several features and bug fixes that could benefit the main r
 If fewer PRs are preferred:
 
 ### **Option A: 3 PRs**
-1. **PR 1: Bug Fixes** (Missing Episodes + Unicode Support)
+1. **PR 1: Bug Fixes** (Missing Episodes + Configuration UI Error Handling + Unicode Support)
 2. **PR 2: Flat View Features** (Series + VOD)
 3. **PR 3: Upfront Caching**
 
 ### **Option B: 2 PRs**
-1. **PR 1: Bug Fixes & Enhancements** (Missing Episodes + Unicode + Flat View)
+1. **PR 1: Bug Fixes & Enhancements** (Missing Episodes + Error Handling + Unicode + Flat View)
 2. **PR 2: Performance** (Upfront Caching)
 
-**Recommendation:** Stick with 4 separate PRs for easier review and independent merging.
+**Recommendation:** Stick with 5 separate PRs for easier review and independent merging.
 
 ---
 
@@ -212,4 +240,4 @@ If fewer PRs are preferred:
 
 ---
 
-*Last updated: 2026-01-24*
+*Last updated: 2026-01-25*
