@@ -130,6 +130,7 @@ public class SeriesCacheService : IDisposable
                 // First pass: count total series for progress calculation
                 foreach (Category category in categoryList)
                 {
+                    _refreshCancellationTokenSource.Token.ThrowIfCancellationRequested();
                     IEnumerable<Series> seriesList = await _streamService.GetSeries(category.CategoryId, _refreshCancellationTokenSource.Token).ConfigureAwait(false);
                     totalSeries += seriesList.Count();
                 }
@@ -138,6 +139,9 @@ public class SeriesCacheService : IDisposable
                 int processedSeries = 0;
                 foreach (Category category in categoryList)
                 {
+                    // Check for cancellation at the start of each category
+                    _refreshCancellationTokenSource.Token.ThrowIfCancellationRequested();
+
                     categoryIndex++;
                     _logger?.LogInformation("Processing category {CategoryIndex}/{TotalCategories}: {CategoryName} (ID: {CategoryId})", categoryIndex, totalCategories, category.CategoryName, category.CategoryId);
                     progress?.Report(0.1 + (((categoryIndex - 1) * 0.8) / totalCategories)); // 10% for categories, 80% for series processing
@@ -149,6 +153,12 @@ public class SeriesCacheService : IDisposable
                     int seriesInCategory = 0;
                     foreach (Series series in seriesListItems)
                     {
+                        // Check for cancellation every 10 series to be responsive
+                        if (processedSeries % 10 == 0)
+                        {
+                            _refreshCancellationTokenSource.Token.ThrowIfCancellationRequested();
+                        }
+
                         seriesCount++;
                         seriesInCategory++;
                         processedSeries++;
@@ -361,6 +371,7 @@ public class SeriesCacheService : IDisposable
         if (_isRefreshing && _refreshCancellationTokenSource != null)
         {
             _logger?.LogInformation("Cancelling cache refresh...");
+            _currentStatus = "Cancelling...";
             _refreshCancellationTokenSource.Cancel();
         }
     }
