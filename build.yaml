@@ -1,7 +1,7 @@
 ---
 name: "Jellyfin Xtream (Flat View)"
 guid: "5d774c35-8567-46d3-a950-9bb8227a0c5d"
-version: "0.9.4.0"
+version: "0.9.4.1"
 targetAbi: "10.11.0.0"
 framework: "net9.0"
 overview: "Stream content from an Xtream-compatible server with flat series and VOD view."
@@ -13,8 +13,11 @@ owner: "Kevinjil"
 artifacts:
   - "Jellyfin.Xtream.dll"
 changelog: >
+  - IMPROVED: Plugin refresh frequency setting now directly controls scheduled task behavior
+  - Scheduled task checks every 10 minutes but only refreshes when configured interval has passed
+  - No need to manually sync plugin settings with Scheduled Tasks anymore
   - NEW: Cache maintenance buttons - "Refresh Now" and "Clear Cache" in Series configuration page
-  - NEW: Configurable refresh frequency in plugin settings (also adjustable in Scheduled Tasks)
+  - NEW: Configurable refresh frequency in plugin settings
   - CHANGED: Cache never expires automatically - data persists until refreshed or cleared
   - FIXED: Episodes not loading from cache on first visit - Fixed IMemoryCache type mismatch (List vs IEnumerable)
   - FIXED: Categories not showing in Series configuration page - Improved error handling and JSON parsing
