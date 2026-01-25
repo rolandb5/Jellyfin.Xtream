@@ -33,7 +33,12 @@ export default function (view) {
         method: 'POST',
         headers: ApiClient.defaultRequestHeaders()
       })
-        .then(response => response.json())
+        .then(response => {
+          if (!response.ok) {
+            throw new Error('Server returned ' + response.status);
+          }
+          return response.json();
+        })
         .then(result => {
           if (result.Success) {
             cacheStatusText.textContent = 'Refresh started...';
@@ -45,7 +50,7 @@ export default function (view) {
         })
         .catch(err => {
           console.error('Failed to trigger cache refresh:', err);
-          Dashboard.alert('Failed to trigger cache refresh');
+          Dashboard.alert('Failed to trigger cache refresh: ' + err.message);
         })
         .finally(() => {
           refreshCacheBtn.disabled = false;
@@ -66,7 +71,12 @@ export default function (view) {
         method: 'POST',
         headers: ApiClient.defaultRequestHeaders()
       })
-        .then(response => response.json())
+        .then(response => {
+          if (!response.ok) {
+            throw new Error('Server returned ' + response.status);
+          }
+          return response.json();
+        })
         .then(result => {
           if (result.Success) {
             Dashboard.alert('Cache cleared successfully');
@@ -79,7 +89,7 @@ export default function (view) {
         })
         .catch(err => {
           console.error('Failed to clear cache:', err);
-          Dashboard.alert('Failed to clear cache');
+          Dashboard.alert('Failed to clear cache: ' + err.message);
         })
         .finally(() => {
           clearCacheBtn.disabled = false;
