@@ -615,6 +615,7 @@ public class SeriesCacheService : IDisposable
             int seriesProcessed = 0;
             int seasonsProcessed = 0;
             int episodesProcessed = 0;
+            int errorCount = 0;
 
             _logger?.LogInformation("Processing {Count} root items for seasons and episodes...", itemCount);
 
@@ -622,56 +623,66 @@ public class SeriesCacheService : IDisposable
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
-                // Log item type for debugging
-                string itemType = item?.GetType().Name ?? "null";
-                bool isFolder = item is Folder;
-
                 // Process all folders (series, categories, etc.)
-                if (isFolder)
+                if (item is Folder)
                 {
                     seriesProcessed++;
 
-                    // Get child items (seasons for series, series for categories)
-                    var childQuery = new InternalItemsQuery
+                    try
                     {
-                        ChannelIds = new[] { channelId },
-                        ParentId = item!.Id,
-                        Recursive = false
-                    };
-
-                    var childResult = await channelManager.GetChannelItemsInternal(
-                        childQuery,
-                        new Progress<double>(),
-                        cancellationToken).ConfigureAwait(false);
-
-                    int childCount = childResult?.Items?.Count ?? 0;
-
-                    // Process grandchildren (episodes for seasons)
-                    if (childResult?.Items != null)
-                    {
-                        foreach (var childItem in childResult.Items)
+                        // Get child items (seasons for series, series for categories)
+                        var childQuery = new InternalItemsQuery
                         {
-                            cancellationToken.ThrowIfCancellationRequested();
+                            ChannelIds = new[] { channelId },
+                            ParentId = item!.Id,
+                            Recursive = false
+                        };
 
-                            if (childItem is Folder)
+                        var childResult = await channelManager.GetChannelItemsInternal(
+                            childQuery,
+                            new Progress<double>(),
+                            cancellationToken).ConfigureAwait(false);
+
+                        // Process grandchildren (episodes for seasons)
+                        if (childResult?.Items != null)
+                        {
+                            foreach (var childItem in childResult.Items)
                             {
-                                seasonsProcessed++;
+                                cancellationToken.ThrowIfCancellationRequested();
 
-                                var grandchildQuery = new InternalItemsQuery
+                                if (childItem is Folder)
                                 {
-                                    ChannelIds = new[] { channelId },
-                                    ParentId = childItem.Id,
-                                    Recursive = false
-                                };
+                                    try
+                                    {
+                                        seasonsProcessed++;
 
-                                var grandchildResult = await channelManager.GetChannelItemsInternal(
-                                    grandchildQuery,
-                                    new Progress<double>(),
-                                    cancellationToken).ConfigureAwait(false);
+                                        var grandchildQuery = new InternalItemsQuery
+                                        {
+                                            ChannelIds = new[] { channelId },
+                                            ParentId = childItem.Id,
+                                            Recursive = false
+                                        };
 
-                                episodesProcessed += grandchildResult?.TotalRecordCount ?? 0;
+                                        var grandchildResult = await channelManager.GetChannelItemsInternal(
+                                            grandchildQuery,
+                                            new Progress<double>(),
+                                            cancellationToken).ConfigureAwait(false);
+
+                                        episodesProcessed += grandchildResult?.TotalRecordCount ?? 0;
+                                    }
+                                    catch (Exception ex) when (ex is not OperationCanceledException)
+                                    {
+                                        errorCount++;
+                                        _logger?.LogDebug(ex, "Error populating episodes for season {SeasonId}", childItem.Id);
+                                    }
+                                }
                             }
                         }
+                    }
+                    catch (Exception ex) when (ex is not OperationCanceledException)
+                    {
+                        errorCount++;
+                        _logger?.LogDebug(ex, "Error populating seasons for item {ItemId}", item.Id);
                     }
 
                     // Log progress every 5 series (less frequent since we have fewer)
@@ -688,11 +699,24 @@ public class SeriesCacheService : IDisposable
                 }
             }
 
-            _logger?.LogInformation(
-                "Jellyfin database population completed: {Series} items, {Seasons} seasons, {Episodes} episodes",
-                seriesProcessed,
-                seasonsProcessed,
-                episodesProcessed);
+            if (errorCount > 0)
+            {
+                _logger?.LogWarning(
+                    "Jellyfin database population completed with {ErrorCount} errors: {Series} items, {Seasons} seasons, {Episodes} episodes",
+                    errorCount,
+                    seriesProcessed,
+                    seasonsProcessed,
+                    episodesProcessed);
+            }
+            else
+            {
+                _logger?.LogInformation(
+                    "Jellyfin database population completed: {Series} items, {Seasons} seasons, {Episodes} episodes",
+                    seriesProcessed,
+                    seasonsProcessed,
+                    episodesProcessed);
+            }
+
             _currentStatus = $"Database populated: {seriesProcessed} items, {seasonsProcessed} seasons, {episodesProcessed} episodes";
         }
         catch (OperationCanceledException)
