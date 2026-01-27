@@ -420,6 +420,103 @@ dotnet_separate_import_directive_groups = false
 
 ---
 
+## Version Management
+
+### Version Mismatch Between build.yaml and .csproj
+
+**Problem:** Jellyfin UI shows wrong plugin version even though build.yaml is updated.
+
+**Root Cause:** Jellyfin reads the version from the DLL's assembly metadata (defined in `.csproj`), **not** from `build.yaml` or `meta.json`.
+
+**Symptoms:**
+- `build.yaml` shows version X.Y.Z.W
+- Jellyfin UI shows older version
+- Logs show correct version loaded
+- Plugin repository shows correct version
+
+**Solution:** Update **THREE** locations when releasing a new version:
+
+1. **build.yaml** - Lines 4 and 15+
+```yaml
+version: "0.9.5.3"
+changelog: >
+  v0.9.5.3 - Description
+```
+
+2. **Jellyfin.Xtream.csproj** - Lines 6-7 ⚠️ **CRITICAL**
+```xml
+<AssemblyVersion>0.9.5.3</AssemblyVersion>
+<FileVersion>0.9.5.3</FileVersion>
+```
+
+3. **Git tag** - Create matching tag
+```bash
+git tag v0.9.5.3
+git push origin v0.9.5.3
+```
+
+**Prevention Checklist:**
+- [ ] Update `build.yaml` version
+- [ ] Update `build.yaml` changelog
+- [ ] Update `.csproj` AssemblyVersion **← Don't forget!**
+- [ ] Update `.csproj` FileVersion **← Don't forget!**
+- [ ] Rebuild: `dotnet build --configuration Release`
+- [ ] Commit changes
+- [ ] Create and push git tag
+- [ ] Create GitHub release (triggers CI/CD)
+
+**Why This Matters:**
+- Users see version in Jellyfin UI from assembly metadata
+- Auto-update compares assembly version
+- Repository manifest uses build.yaml
+- All three must match for consistency
+
+### Plugin File Permissions (Docker/Linux)
+
+**Problem:** Jellyfin fails to start with "Access denied" error after deploying plugin files.
+
+**Error Message:**
+```
+System.UnauthorizedAccessException: Access to the path '/config/data/plugins/Jellyfin Xtream (Flat View)_X.Y.Z/meta.json' is denied.
+```
+
+**Root Cause:** Files copied to plugin directory are owned by `root`, but Jellyfin container runs as user `abc:abc`.
+
+**Solution:**
+```bash
+# After copying files to plugin directory, fix ownership:
+docker exec jellyfin chown -R abc:abc '/config/data/plugins/Jellyfin Xtream (Flat View)_X.Y.Z'
+```
+
+**Prevention:**
+When deploying manually:
+1. Copy DLL and meta.json to plugin directory
+2. **Immediately** run `chown -R abc:abc` on the directory
+3. Then restart Jellyfin
+
+**Correct Deployment Process:**
+```bash
+# 1. Copy DLL
+docker cp /tmp/Jellyfin.Xtream.dll jellyfin:'/config/data/plugins/Jellyfin Xtream (Flat View)_X.Y.Z/'
+
+# 2. Copy meta.json
+docker cp /tmp/meta.json jellyfin:'/config/data/plugins/Jellyfin Xtream (Flat View)_X.Y.Z/'
+
+# 3. Fix permissions (CRITICAL!)
+docker exec jellyfin chown -R abc:abc '/config/data/plugins/Jellyfin Xtream (Flat View)_X.Y.Z'
+
+# 4. Restart Jellyfin
+docker restart jellyfin
+```
+
+**Why This Happens:**
+- Docker `cp` creates files as root
+- Jellyfin security runs as non-root user `abc`
+- Plugin manager needs read access to meta.json
+- Plugin needs read access to DLL
+
+---
+
 ## Quick Reference Card
 
 **Before Every Commit:**
@@ -449,4 +546,4 @@ make install-hooks
 
 ---
 
-*Last updated: 2026-01-24*
+*Last updated: 2026-01-27*
