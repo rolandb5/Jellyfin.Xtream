@@ -263,6 +263,20 @@ public class XtreamController(IXtreamClient xtreamClient) : ControllerBase
 
         Plugin.Instance.SeriesCacheService.InvalidateCache();
 
+        // Trigger Jellyfin to refresh channel items - since cache is now empty,
+        // the plugin will return empty results and Jellyfin will remove orphaned items from jellyfin.db
+        try
+        {
+            Plugin.Instance.TaskService.CancelIfRunningAndQueue(
+                "Jellyfin.LiveTv",
+                "Jellyfin.LiveTv.Channels.RefreshChannelsScheduledTask");
+            message += " Jellyfin channel refresh triggered to clean up jellyfin.db.";
+        }
+        catch
+        {
+            message += " Warning: Could not trigger Jellyfin cleanup.";
+        }
+
         return Ok(new { Success = true, Message = message });
     }
 }
