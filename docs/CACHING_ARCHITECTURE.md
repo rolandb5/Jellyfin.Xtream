@@ -14,23 +14,25 @@ This document explains how series data is cached and flows through three distinc
 
 ## Overview
 
-The plugin implements a **three-layer caching architecture** to optimize performance and reduce API calls:
+The plugin implements a **three-layer caching architecture** for **eager loading**: pre-populate Jellyfin's database upfront so all series/seasons/episodes are ready for instant browsing without waiting for API calls.
 
 ```
 ┌─────────────────┐
 │  Xtream API     │  ← Source of truth (remote)
 └────────┬────────┘
-         │ API calls (slow, rate-limited)
+         │ Batched API calls (700+ calls in 10-20 minutes)
          ↓
 ┌─────────────────┐
-│ Plugin In-Memory│  ← Fast lookup cache (SeriesCacheService)
-│     Cache       │     Stores: categories, series, seasons, episodes
+│ Plugin In-Memory│  ← STAGING BUFFER for eager loading
+│     Cache       │     Purpose: Batch API calls, serve Jellyfin quickly
+│ (SeriesCache)   │     Stores: categories, series, seasons, episodes
 └────────┬────────┘
-         │ Channel API calls
+         │ Triggers Jellyfin channel refresh
          ↓
 ┌─────────────────┐
-│  Jellyfin DB    │  ← Persistent storage (jellyfin.db SQLite)
-│ (library.db)    │     Stores: metadata, item relationships, state
+│  Jellyfin DB    │  ← PRIMARY CACHE (persistent, fast)
+│ (jellyfin.db)   │     Populated from plugin cache (fast lookups)
+│                 │     Stores: metadata, item relationships, state
 └────────┬────────┘
          │ HTTP API responses
          ↓
@@ -39,6 +41,11 @@ The plugin implements a **three-layer caching architecture** to optimize perform
 │                 │     Caches: API responses, rendered UI
 └─────────────────┘
 ```
+
+**Key Insight:** The plugin cache is NOT redundant with Jellyfin's DB. It serves as a **staging buffer** that enables:
+1. Batching hundreds of API calls upfront (minimize rate limiting)
+2. Serving Jellyfin's 700+ GetChannelItems() calls from RAM (fast)
+3. Pre-populating jellyfin.db with all content (instant browsing)
 
 ---
 
@@ -195,6 +202,54 @@ MediaStreams
 ---
 
 ## Data Flow
+
+### Scenario 0: Eager Loading (Cache Refresh with Auto-Populate)
+
+**This is the PRIMARY use case - pre-populating jellyfin.db for instant browsing:**
+
+```
+Background task triggers (startup or every 60 minutes)
+         ↓
+1. RefreshCacheAsync() fetches ALL data from Xtream API:
+   ├── Fetch categories (1 API call)
+   ├── For each category: Fetch series list (N API calls)
+   ├── For each series: Fetch seasons (M API calls)
+   └── For each season: Fetch episodes (P API calls)
+   Total: ~700 API calls batched over 10-20 minutes
+         ↓
+2. Store everything in plugin IMemoryCache:
+   ├── series_cache_{version}_categories
+   ├── series_cache_{version}_serieslist_{categoryId}
+   ├── series_cache_{version}_seriesinfo_{seriesId}
+   ├── series_cache_{version}_season_{seriesId}_{seasonId}
+   └── series_cache_{version}_episodes_{seriesId}_{seasonId}
+         ↓
+3. Trigger Jellyfin channel refresh:
+   Plugin.Instance.TaskService.CancelIfRunningAndQueue(
+       "Jellyfin.LiveTv.Channels.RefreshChannelsScheduledTask")
+         ↓
+4. Jellyfin calls GetChannelItems() ~700 times:
+   ├── GetChannelItems(root) → Get all series
+   ├── GetChannelItems(series1) → Get seasons (from cache!)
+   ├── GetChannelItems(season1) → Get episodes (from cache!)
+   └── ... (all from cache, microseconds per call)
+         ↓
+5. Jellyfin populates jellyfin.db with everything
+   Database now contains all series/seasons/episodes
+         ↓
+6. Users browse → Instant! Everything already in jellyfin.db
+```
+
+**Result:**
+- API calls: Batched upfront (one-time cost)
+- Jellyfin DB: Fully populated (ready for browsing)
+- User experience: Instant browsing, no waiting
+
+**Without this eager loading:**
+- User clicks series → API call (5-10 seconds wait)
+- User clicks season → API call (5-10 seconds wait)
+- User clicks episode → API call (5-10 seconds wait)
+- Terrible browsing experience
 
 ### Scenario 1: Fresh Start (Cache Enabled)
 
@@ -605,12 +660,27 @@ logger.LogInformation("GetEpisodes returning {Count} episodes", items.Count);
 
 ## Summary
 
-The caching architecture involves **three independent layers**, each with its own purpose and limitations:
+The caching architecture involves **three layers working together for eager loading**:
 
-| Layer | Storage | Persistence | Speed | Limitation |
-|-------|---------|-------------|-------|------------|
-| Plugin Cache | RAM (IMemoryCache) | Lost on restart | Very fast | Doesn't cache series lists |
-| Jellyfin DB | SQLite (library.db) | Persistent | Fast | Can become stale |
-| Browser Cache | Browser storage | Per-session | Very fast | User-specific, can be stale |
+| Layer | Storage | Persistence | Purpose | Real Value |
+|-------|---------|-------------|---------|------------|
+| Plugin Cache | RAM (IMemoryCache) | Lost on restart | **Staging buffer** | Batch API calls, serve Jellyfin fast |
+| Jellyfin DB | SQLite (library.db) | Persistent | **Primary cache** | Pre-populated for instant browsing |
+| Browser Cache | Browser storage | Per-session | **UI cache** | Reduce HTTP requests |
 
-**Key takeaway:** When troubleshooting display issues, always check all three layers and understand that they can be out of sync. The diagnostic logging added in v0.9.4.13-15 helps identify which layer is causing issues.
+**The Real Value of Plugin Cache:**
+
+The plugin cache is NOT redundant - it's **essential for eager loading**:
+
+1. **Without plugin cache:**
+   - Jellyfin calls GetChannelItems() 700 times
+   - Each call → API call to Xtream
+   - Result: Hours to populate, rate limiting, timeouts
+
+2. **With plugin cache (current implementation):**
+   - RefreshCacheAsync() batches 700 API calls upfront (10-20 min)
+   - Jellyfin calls GetChannelItems() 700 times
+   - Each call → Cache lookup (microseconds)
+   - Result: Jellyfin DB populated in minutes, instant browsing
+
+**Key takeaway:** The plugin cache is the **minimum complexity needed** to achieve eager loading without hitting API rate limits. It's not about redundancy - it's about batching API calls and serving Jellyfin quickly to pre-populate jellyfin.db for instant user browsing.

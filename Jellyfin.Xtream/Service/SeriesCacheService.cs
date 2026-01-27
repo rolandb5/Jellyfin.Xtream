@@ -231,6 +231,20 @@ public class SeriesCacheService : IDisposable
                 _currentStatus = $"Completed: {seriesCount} series, {seasonCount} seasons, {episodeCount} episodes";
                 _lastRefreshComplete = DateTime.UtcNow;
                 _logger?.LogInformation("Cache refresh completed: {SeriesCount} series, {SeasonCount} seasons, {EpisodeCount} episodes across {CategoryCount} categories", seriesCount, seasonCount, episodeCount, totalCategories);
+
+                // Trigger Jellyfin to refresh channel items from our cache and populate jellyfin.db
+                try
+                {
+                    _logger?.LogInformation("Triggering Jellyfin channel refresh to populate jellyfin.db from cache");
+                    Plugin.Instance.TaskService.CancelIfRunningAndQueue(
+                        "Jellyfin.LiveTv",
+                        "Jellyfin.LiveTv.Channels.RefreshChannelsScheduledTask");
+                    _logger?.LogInformation("Jellyfin channel refresh triggered successfully");
+                }
+                catch (Exception ex)
+                {
+                    _logger?.LogWarning(ex, "Failed to trigger Jellyfin channel refresh - jellyfin.db may not be populated until user browses");
+                }
             }
             catch (OperationCanceledException)
             {
