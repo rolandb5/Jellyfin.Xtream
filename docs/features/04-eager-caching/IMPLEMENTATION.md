@@ -516,4 +516,11 @@ docker restart jellyfin
 
 ## Future Improvements
 
-See [TODO.md](./TODO.md) for planned enhancements.
+Potential enhancements include:
+- Parallel series fetching with rate limiting
+- Cache statistics in UI
+- Disk-based cache persistence
+- Delta updates (incremental refresh)
+- Progressive Jellyfin DB population
+
+> **For maintainers:** Detailed TODO list and planning docs are in the private repository.

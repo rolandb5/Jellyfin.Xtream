@@ -372,7 +372,13 @@ Cache refresh encounters malformed JSON → Log warning → Store empty data →
 
 ## Future Roadmap
 
-See [TODO.md](./TODO.md) for detailed future plans.
+Planned enhancements:
+- Parallel series fetching (10x faster refresh)
+- Cache statistics in UI
+- Delta updates (incremental refresh)
+- Disk-based cache persistence
+
+> **For maintainers:** Detailed roadmap and planning docs are in the private repository.
 
 **Planned:**
 - Parallel series fetching (10x faster refresh)
@@ -448,5 +454,5 @@ de9fd6b - Implement true eager loading by auto-populating Jellyfin database
 - [ARCHITECTURE.md](./ARCHITECTURE.md) - Caching architecture
 - [IMPLEMENTATION.md](./IMPLEMENTATION.md) - Implementation details
 - [TEST_PLAN.md](./TEST_PLAN.md) - Test cases
-- [TODO.md](./TODO.md) - Future enhancements
-- [CONTEXT.md](./CONTEXT.md) - Session context for AI assistants
+
+> **For maintainers:** Additional internal documentation (TODO lists, AI context, session notes) is in the private repository.

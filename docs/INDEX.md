@@ -157,10 +157,10 @@ See [CONTRIBUTING.md](../CONTRIBUTING.md) for:
 - `REQUIREMENTS.md` - User stories, functional/non-functional requirements
 - `ARCHITECTURE.md` - Design decisions, components, data flow
 - `IMPLEMENTATION.md` - Code changes, technical details
-- `CONTEXT.md` - AI assistant context, gotchas, session handoff
 - `TEST_PLAN.md` - Manual test cases, performance benchmarks
-- `TODO.md` - Outstanding tasks, future enhancements
 - `CHANGELOG.md` - Version history, breaking changes
+
+> **Note:** Additional internal documentation files (CONTEXT.md for AI assistants, TODO.md for task tracking) are maintained in a separate private repository.
 
 ### Document Structure
 Each feature follows a consistent template:
@@ -206,7 +206,6 @@ Use emoji for quick visual scanning:
 1. Update relevant feature documentation
 2. Update "Last Updated" date in document info
 3. Add entry to feature's CHANGELOG.md
-4. Update CONTEXT.md if significant change
 
 ### Documentation Reviews
 Before submitting PRs:
@@ -215,7 +214,6 @@ Before submitting PRs:
 - [ ] Links are valid and working
 - [ ] Code examples are accurate
 - [ ] Test plans are verified
-- [ ] CONTEXT.md has AI gotchas documented
 
 ---
 
