@@ -14,12 +14,16 @@ Each feature is documented with a complete set of files covering requirements, a
 
 #### [01 - Flat View](features/01-flat-view/REQUIREMENTS.md)
 **Status:** ✅ Implemented (v0.9.1.0)
-**PR Ready:** 🟡 Needs upstream testing
+**PR Ready:** 🟢 Ready for upstream submission
+**Documentation:** ✅ Complete
 
 Display all series/movies in a single alphabetical list without category folders.
 
 - [Requirements](features/01-flat-view/REQUIREMENTS.md) - User stories and functional requirements
-- Architecture, Implementation, Test Plan, Changelog: *In progress*
+- [Architecture](features/01-flat-view/ARCHITECTURE.md) - Design decisions and data flow
+- [Implementation](features/01-flat-view/IMPLEMENTATION.md) - Detailed code changes
+- [Test Plan](features/01-flat-view/TEST_PLAN.md) - Manual test cases and results
+- [Changelog](features/01-flat-view/CHANGELOG.md) - Version history and evolution
 
 #### 02 - Unicode Pipe Support
 **Status:** ✅ Implemented (v0.9.4.x)
