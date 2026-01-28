@@ -25,6 +25,7 @@ using MediaBrowser.Controller.Channels;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Providers;
 using MediaBrowser.Model.Channels;
+using MediaBrowser.Model.Entities;
 using MediaBrowser.Model.Providers;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
@@ -344,6 +345,15 @@ public class SeriesCacheService : IDisposable
                     _logger?.LogInformation("Looking up TVDb metadata for {Count} series...", totalSeries);
                     _currentStatus = "Fetching TVDb images...";
 
+                    // Parse title overrides once before the lookup loop
+                    Dictionary<string, string> titleOverrides = ParseTitleOverrides(
+                        Plugin.Instance?.Configuration.TvdbTitleOverrides ?? string.Empty);
+
+                    if (titleOverrides.Count > 0)
+                    {
+                        _logger?.LogInformation("Loaded {Count} TVDb title overrides", titleOverrides.Count);
+                    }
+
                     int tmdbFound = 0;
                     int tmdbNotFound = 0;
 
@@ -356,6 +366,7 @@ public class SeriesCacheService : IDisposable
                             string? tmdbUrl = await LookupAndCacheTmdbImageAsync(
                                 series.SeriesId,
                                 series.Name,
+                                titleOverrides,
                                 cacheOptions,
                                 _refreshCancellationTokenSource.Token).ConfigureAwait(false);
 
@@ -568,15 +579,18 @@ public class SeriesCacheService : IDisposable
 
     /// <summary>
     /// Looks up TMDB image URL for a series and caches it.
+    /// Checks title overrides first for direct TVDb ID lookup, then falls back to name search.
     /// </summary>
     /// <param name="seriesId">The Xtream series ID.</param>
     /// <param name="seriesName">The series name to search for.</param>
+    /// <param name="titleOverrides">Title-to-TVDb-ID override map.</param>
     /// <param name="cacheOptions">Cache options to use.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The TMDB image URL if found, null otherwise.</returns>
     private async Task<string?> LookupAndCacheTmdbImageAsync(
         int seriesId,
         string seriesName,
+        Dictionary<string, string> titleOverrides,
         MemoryCacheEntryOptions cacheOptions,
         CancellationToken cancellationToken)
     {
@@ -594,7 +608,23 @@ public class SeriesCacheService : IDisposable
                 return null;
             }
 
-            // Try to find an image with progressively cleaned search terms
+            // Check title overrides first for direct TVDb ID lookup
+            if (titleOverrides.TryGetValue(cleanName, out string? tvdbId))
+            {
+                _logger?.LogInformation("Using TVDb title override for series {SeriesId} ({Name}) → TVDb ID {TvdbId}", seriesId, cleanName, tvdbId);
+                string? overrideResult = await LookupByTvdbIdAsync(cleanName, tvdbId, cancellationToken).ConfigureAwait(false);
+                if (overrideResult != null)
+                {
+                    string cacheKey = $"{CachePrefix}tmdb_image_{seriesId}";
+                    _memoryCache.Set(cacheKey, overrideResult, cacheOptions);
+                    _logger?.LogInformation("Cached TVDb image for series {SeriesId} ({Name}) via override (TVDb ID {TvdbId}): {Url}", seriesId, cleanName, tvdbId, overrideResult);
+                    return overrideResult;
+                }
+
+                _logger?.LogWarning("TVDb title override for series {SeriesId} ({Name}) with TVDb ID {TvdbId} returned no image, falling back to name search", seriesId, cleanName, tvdbId);
+            }
+
+            // Fall back to name-based search with progressively cleaned search terms
             string[] searchTerms = GenerateSearchTerms(cleanName);
 
             foreach (string searchTerm in searchTerms)
@@ -641,16 +671,56 @@ public class SeriesCacheService : IDisposable
     }
 
     /// <summary>
-    /// Generates multiple search terms from a series name, progressively cleaning it.
-    /// TVDb doesn't search by localized titles, so we need to try variations.
-    /// Uses user-configurable translations from plugin settings.
+    /// Looks up a series on TVDb by its TVDb ID and returns the image URL.
+    /// </summary>
+    /// <param name="cleanName">The cleaned series name (for logging).</param>
+    /// <param name="tvdbId">The TVDb ID to look up.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The image URL if found, null otherwise.</returns>
+    private async Task<string?> LookupByTvdbIdAsync(
+        string cleanName,
+        string tvdbId,
+        CancellationToken cancellationToken)
+    {
+        if (_providerManager == null)
+        {
+            return null;
+        }
+
+        RemoteSearchQuery<JellyfinSeriesInfo> query = new()
+        {
+            SearchInfo = new()
+            {
+                Name = cleanName,
+                ProviderIds = new Dictionary<string, string>
+                {
+                    { MetadataProvider.Tvdb.ToString(), tvdbId }
+                }
+            },
+            SearchProviderName = "TheTVDB",
+        };
+
+        IEnumerable<RemoteSearchResult> results = await _providerManager
+            .GetRemoteSearchResults<JellyfinSeries, JellyfinSeriesInfo>(query, cancellationToken)
+            .ConfigureAwait(false);
+
+        RemoteSearchResult? resultWithImage = results.FirstOrDefault(r =>
+            !string.IsNullOrEmpty(r.ImageUrl) &&
+            !r.ImageUrl.Contains("missing/series", StringComparison.OrdinalIgnoreCase) &&
+            !r.ImageUrl.Contains("missing/movie", StringComparison.OrdinalIgnoreCase));
+
+        return resultWithImage?.ImageUrl;
+    }
+
+    /// <summary>
+    /// Generates search terms from a series name for TVDb lookup.
+    /// Returns the original name and a variant with language indicators stripped.
     /// </summary>
     /// <param name="name">The original series name.</param>
-    /// <returns>Array of search terms to try, from most specific to most generic.</returns>
+    /// <returns>Array of search terms to try.</returns>
     private static string[] GenerateSearchTerms(string name)
     {
         List<string> terms = new();
-        var config = Plugin.Instance?.Configuration;
 
         // 1. Add original name first
         terms.Add(name);
@@ -667,86 +737,14 @@ public class SeriesCacheService : IDisposable
             terms.Add(withoutLang);
         }
 
-        // 3. Try user-configured "word for and" substitutions (e.g., "en" → "&" and "and")
-        string wordForAnd = config?.TvdbWordForAnd ?? string.Empty;
-        if (!string.IsNullOrWhiteSpace(wordForAnd))
-        {
-            string pattern = $" {wordForAnd} ";
-            if (withoutLang.Contains(pattern, StringComparison.OrdinalIgnoreCase))
-            {
-                // Try with "&"
-                string withAmpersand = withoutLang.Replace(pattern, " & ", StringComparison.OrdinalIgnoreCase);
-                if (!terms.Contains(withAmpersand, StringComparer.OrdinalIgnoreCase))
-                {
-                    terms.Add(withAmpersand);
-                }
-
-                // Try with "and"
-                string withAnd = withoutLang.Replace(pattern, " and ", StringComparison.OrdinalIgnoreCase);
-                if (!terms.Contains(withAnd, StringComparer.OrdinalIgnoreCase))
-                {
-                    terms.Add(withAnd);
-                }
-
-                // Try "word_for_and the" → "and the"
-                string patternThe = $" {wordForAnd} the ";
-                if (withoutLang.Contains(patternThe, StringComparison.OrdinalIgnoreCase))
-                {
-                    string withAndThe = withoutLang.Replace(patternThe, " and the ", StringComparison.OrdinalIgnoreCase);
-                    if (!terms.Contains(withAndThe, StringComparer.OrdinalIgnoreCase))
-                    {
-                        terms.Add(withAndThe);
-                    }
-                }
-            }
-        }
-
-        // 4. Try user-configured article substitution (e.g., "De " → "The ")
-        string languageArticle = config?.TvdbLanguageArticle ?? string.Empty;
-        if (!string.IsNullOrWhiteSpace(languageArticle))
-        {
-            string articleWithSpace = languageArticle.Trim() + " ";
-            if (withoutLang.StartsWith(articleWithSpace, StringComparison.OrdinalIgnoreCase))
-            {
-                string withThe = string.Concat("The ", withoutLang.AsSpan(articleWithSpace.Length));
-                if (!terms.Contains(withThe, StringComparer.OrdinalIgnoreCase))
-                {
-                    terms.Add(withThe);
-                }
-            }
-        }
-
-        // 5. Apply user-configured word translations
-        string translationsConfig = config?.TvdbSearchTranslations ?? string.Empty;
-        if (!string.IsNullOrWhiteSpace(translationsConfig))
-        {
-            var wordSubstitutions = ParseTranslations(translationsConfig);
-
-            string current = withoutLang;
-            bool anySubstitution = false;
-            foreach (var kvp in wordSubstitutions)
-            {
-                if (current.Contains(kvp.Key, StringComparison.OrdinalIgnoreCase))
-                {
-                    current = current.Replace(kvp.Key, kvp.Value, StringComparison.OrdinalIgnoreCase);
-                    anySubstitution = true;
-                }
-            }
-
-            if (anySubstitution && !terms.Contains(current, StringComparer.OrdinalIgnoreCase))
-            {
-                terms.Add(current);
-            }
-        }
-
         return terms.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
     }
 
     /// <summary>
-    /// Parses the translation configuration string into a dictionary.
-    /// Format: one mapping per line, "LocalWord=EnglishWord".
+    /// Parses the title override configuration string into a dictionary.
+    /// Format: one mapping per line, "SeriesTitle=TVDbID".
     /// </summary>
-    private static Dictionary<string, string> ParseTranslations(string config)
+    private static Dictionary<string, string> ParseTitleOverrides(string config)
     {
         var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 

@@ -1,6 +1,3 @@
-// Language presets are loaded from the server API
-// Community contributions: add new language JSON files in Configuration/Web/languages/
-
 export default function (view) {
   view.addEventListener("viewshow", () => import(
     ApiClient.getUrl("web/ConfigurationPage", {
@@ -27,32 +24,10 @@ export default function (view) {
     const cacheMinDelay = view.querySelector("#CacheRefreshMinDelayMs");
     const cacheMinDelayValue = view.querySelector("#CacheMinDelayValue");
 
-    // TVDb settings
+    // Artwork Injector settings
     const useTvdbForSeriesMetadata = view.querySelector("#UseTvdbForSeriesMetadata");
     const tvdbOptionsContainer = view.querySelector("#TvdbOptionsContainer");
-    const tvdbLanguagePreset = view.querySelector("#TvdbLanguagePreset");
-    const tvdbWordForAnd = view.querySelector("#TvdbWordForAnd");
-    const tvdbLanguageArticle = view.querySelector("#TvdbLanguageArticle");
-    const tvdbSearchTranslations = view.querySelector("#TvdbSearchTranslations");
-
-    // Store loaded language presets
-    let languagePresets = {};
-
-    // Load language presets from API
-    const loadLanguages = Xtream.fetchJson('Xtream/Languages')
-      .then((languages) => {
-        languages.forEach((lang) => {
-          const option = document.createElement('option');
-          option.value = lang.Code;
-          option.textContent = lang.Name;
-          tvdbLanguagePreset.appendChild(option);
-        });
-        return languages;
-      })
-      .catch((err) => {
-        console.error('Failed to load language presets:', err);
-        return [];
-      });
+    const tvdbTitleOverrides = view.querySelector("#TvdbTitleOverrides");
 
     // Toggle cache options visibility
     function updateCacheOptionsVisibility() {
@@ -62,59 +37,6 @@ export default function (view) {
     // Toggle TVDb options visibility
     function updateTvdbOptionsVisibility() {
       tvdbOptionsContainer.style.display = useTvdbForSeriesMetadata.checked ? 'block' : 'none';
-    }
-
-    // Apply language preset (fetches full preset from API)
-    function applyLanguagePreset(presetCode) {
-      if (!presetCode) {
-        return; // Custom mode - don't change anything
-      }
-
-      // Check if we already have this preset cached
-      if (languagePresets[presetCode]) {
-        applyPresetData(languagePresets[presetCode]);
-        return;
-      }
-
-      // Fetch from API
-      Xtream.fetchJson(`Xtream/Languages/${presetCode}`)
-        .then((preset) => {
-          languagePresets[presetCode] = preset;
-          applyPresetData(preset);
-        })
-        .catch((err) => {
-          console.error(`Failed to load language preset '${presetCode}':`, err);
-        });
-    }
-
-    function applyPresetData(preset) {
-      tvdbLanguageArticle.value = preset.Article || '';
-      tvdbWordForAnd.value = preset.WordForAnd || '';
-      // Append preset translations to existing ones (don't overwrite user's custom translations)
-      if (preset.Translations) {
-        const existingTranslations = tvdbSearchTranslations.value.trim();
-        if (existingTranslations) {
-          // Check if preset translations are already present
-          const presetLines = preset.Translations.split('\n').filter(l => l.trim());
-          const existingLines = existingTranslations.split('\n');
-          const newLines = presetLines.filter(line => !existingLines.includes(line));
-          if (newLines.length > 0) {
-            tvdbSearchTranslations.value = existingTranslations + '\n' + newLines.join('\n');
-          }
-        } else {
-          tvdbSearchTranslations.value = preset.Translations;
-        }
-      }
-    }
-
-    // Detect current preset from settings (requires presets to be loaded)
-    function detectLanguagePreset(article, wordForAnd) {
-      for (const [code, preset] of Object.entries(languagePresets)) {
-        if (preset.Article === article && preset.WordForAnd === wordForAnd) {
-          return code;
-        }
-      }
-      return ''; // Custom
     }
 
     // Update parallelism display value
@@ -132,53 +54,22 @@ export default function (view) {
     cacheMinDelay.addEventListener('input', updateMinDelayDisplay);
     useTvdbForSeriesMetadata.addEventListener('change', updateTvdbOptionsVisibility);
 
-    // Language preset selection
-    tvdbLanguagePreset.addEventListener('change', () => {
-      applyLanguagePreset(tvdbLanguagePreset.value);
-    });
-
-    // When user manually edits article or wordForAnd, update dropdown to match or show Custom
-    function updatePresetDropdown() {
-      const detected = detectLanguagePreset(tvdbLanguageArticle.value.trim(), tvdbWordForAnd.value.trim());
-      tvdbLanguagePreset.value = detected;
-    }
-    tvdbLanguageArticle.addEventListener('input', updatePresetDropdown);
-    tvdbWordForAnd.addEventListener('input', updatePresetDropdown);
-
-    // Wait for both config and languages to load, then detect preset
-    Promise.all([getConfig, loadLanguages]).then(([config, languages]) => {
+    getConfig.then((config) => {
       visible.checked = config.IsSeriesVisible;
       flattenSeriesView.checked = config.FlattenSeriesView || false;
-      enableCaching.checked = config.EnableSeriesCaching !== false; // Default to true for backwards compatibility
+      enableCaching.checked = config.EnableSeriesCaching !== false;
       cacheRefreshMinutes.value = config.SeriesCacheExpirationMinutes || 600;
       cacheParallelism.value = config.CacheRefreshParallelism || 3;
       cacheMinDelay.value = config.CacheRefreshMinDelayMs !== undefined ? config.CacheRefreshMinDelayMs : 100;
 
-      // TVDb settings (default to enabled for backwards compatibility)
+      // Artwork Injector settings
       useTvdbForSeriesMetadata.checked = config.UseTvdbForSeriesMetadata !== false;
-      tvdbWordForAnd.value = config.TvdbWordForAnd || '';
-      tvdbLanguageArticle.value = config.TvdbLanguageArticle || '';
-      tvdbSearchTranslations.value = config.TvdbSearchTranslations || '';
+      tvdbTitleOverrides.value = config.TvdbTitleOverrides || '';
 
       updateCacheOptionsVisibility();
       updateParallelismDisplay();
       updateMinDelayDisplay();
       updateTvdbOptionsVisibility();
-
-      // Load all presets to enable detection, then detect
-      const presetLoads = languages.map((lang) =>
-        Xtream.fetchJson(`Xtream/Languages/${lang.Code}`)
-          .then((preset) => { languagePresets[lang.Code] = preset; })
-          .catch(() => {})
-      );
-
-      Promise.all(presetLoads).then(() => {
-        const detectedPreset = detectLanguagePreset(
-          config.TvdbLanguageArticle || '',
-          config.TvdbWordForAnd || ''
-        );
-        tvdbLanguagePreset.value = detectedPreset;
-      });
     });
 
     // Refresh Now button handler
@@ -385,11 +276,9 @@ export default function (view) {
           if (minDelay > 1000) minDelay = 1000;
           config.CacheRefreshMinDelayMs = minDelay;
 
-          // TVDb settings
+          // Artwork Injector settings
           config.UseTvdbForSeriesMetadata = useTvdbForSeriesMetadata.checked;
-          config.TvdbWordForAnd = tvdbWordForAnd.value.trim();
-          config.TvdbLanguageArticle = tvdbLanguageArticle.value.trim();
-          config.TvdbSearchTranslations = tvdbSearchTranslations.value;
+          config.TvdbTitleOverrides = tvdbTitleOverrides.value;
 
           config.Series = data;
           console.log('Saving series configuration:', JSON.stringify(data, null, 2));
