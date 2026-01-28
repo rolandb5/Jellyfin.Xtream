@@ -23,9 +23,19 @@ using System.Threading.Tasks;
 using Jellyfin.Xtream.Client.Models;
 using MediaBrowser.Controller.Channels;
 using MediaBrowser.Controller.Entities;
+using MediaBrowser.Controller.Providers;
 using MediaBrowser.Model.Channels;
+using MediaBrowser.Model.Providers;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
+
+// Type aliases to disambiguate from MediaBrowser.Controller.Entities.TV types
+using JellyfinSeries = MediaBrowser.Controller.Entities.TV.Series;
+using JellyfinSeriesInfo = MediaBrowser.Controller.Providers.SeriesInfo;
+using XtreamEpisode = Jellyfin.Xtream.Client.Models.Episode;
+using XtreamSeason = Jellyfin.Xtream.Client.Models.Season;
+using XtreamSeries = Jellyfin.Xtream.Client.Models.Series;
+using XtreamSeriesInfo = Jellyfin.Xtream.Client.Models.SeriesInfo;
 
 namespace Jellyfin.Xtream.Service;
 
@@ -38,6 +48,7 @@ public class SeriesCacheService : IDisposable
     private readonly IMemoryCache _memoryCache;
     private readonly FailureTrackingService _failureTrackingService;
     private readonly ILogger<SeriesCacheService>? _logger;
+    private readonly IProviderManager? _providerManager;
     private readonly SemaphoreSlim _refreshLock = new(1, 1);
     private int _cacheVersion = 0;
     private bool _isRefreshing = false;
@@ -54,16 +65,19 @@ public class SeriesCacheService : IDisposable
     /// <param name="memoryCache">The memory cache instance.</param>
     /// <param name="failureTrackingService">The failure tracking service instance.</param>
     /// <param name="logger">Optional logger instance.</param>
+    /// <param name="providerManager">Optional provider manager for TMDB lookups.</param>
     public SeriesCacheService(
         StreamService streamService,
         IMemoryCache memoryCache,
         FailureTrackingService failureTrackingService,
-        ILogger<SeriesCacheService>? logger = null)
+        ILogger<SeriesCacheService>? logger = null,
+        IProviderManager? providerManager = null)
     {
         _streamService = streamService;
         _memoryCache = memoryCache;
         _failureTrackingService = failureTrackingService;
         _logger = logger;
+        _providerManager = providerManager;
     }
 
     /// <summary>
@@ -154,13 +168,13 @@ public class SeriesCacheService : IDisposable
 
                 // Single pass: fetch all series lists and cache them for reuse
                 // This eliminates the double API call that was happening before
-                Dictionary<int, List<Series>> seriesListsByCategory = new();
+                Dictionary<int, List<XtreamSeries>> seriesListsByCategory = new();
                 _currentStatus = "Fetching series lists...";
                 foreach (Category category in categoryList)
                 {
                     _refreshCancellationTokenSource.Token.ThrowIfCancellationRequested();
-                    IEnumerable<Series> seriesList = await _streamService.GetSeries(category.CategoryId, _refreshCancellationTokenSource.Token).ConfigureAwait(false);
-                    List<Series> seriesItems = seriesList.ToList();
+                    IEnumerable<XtreamSeries> seriesList = await _streamService.GetSeries(category.CategoryId, _refreshCancellationTokenSource.Token).ConfigureAwait(false);
+                    List<XtreamSeries> seriesItems = seriesList.ToList();
                     seriesListsByCategory[category.CategoryId] = seriesItems;
                     totalSeries += seriesItems.Count;
                 }
@@ -202,12 +216,12 @@ public class SeriesCacheService : IDisposable
                 }
 
                 // Flatten all series into a single list with category info for parallel processing
-                List<(Series Series, Category Category)> allSeries = new();
+                List<(XtreamSeries Series, Category Category)> allSeries = new();
                 foreach (Category category in categoryList)
                 {
-                    List<Series> seriesListItems = seriesListsByCategory[category.CategoryId];
+                    List<XtreamSeries> seriesListItems = seriesListsByCategory[category.CategoryId];
                     _memoryCache.Set($"{cachePrefix}serieslist_{category.CategoryId}", seriesListItems, cacheOptions);
-                    foreach (Series series in seriesListItems)
+                    foreach (XtreamSeries series in seriesListItems)
                     {
                         allSeries.Add((series, category));
                     }
@@ -225,7 +239,7 @@ public class SeriesCacheService : IDisposable
 
                 await Parallel.ForEachAsync(allSeries, parallelOptions, async (item, ct) =>
                 {
-                    Series series = item.Series;
+                    XtreamSeries series = item.Series;
 
                     try
                     {
@@ -249,16 +263,16 @@ public class SeriesCacheService : IDisposable
                             localSeasonCount++;
 
                             // Get episodes from the already-fetched SeriesStreamInfo (no API call)
-                            IEnumerable<Tuple<SeriesStreamInfo, Season?, Episode>> episodes = _streamService.GetEpisodesFromSeriesInfo(seriesStreamInfo!, series.SeriesId, seasonId);
+                            IEnumerable<Tuple<SeriesStreamInfo, XtreamSeason?, XtreamEpisode>> episodes = _streamService.GetEpisodesFromSeriesInfo(seriesStreamInfo!, series.SeriesId, seasonId);
 
-                            List<Episode> episodeList = episodes.Select(e => e.Item3).ToList();
+                            List<XtreamEpisode> episodeList = episodes.Select(e => e.Item3).ToList();
                             localEpisodeCount += episodeList.Count;
 
                             // Cache episodes for this season
                             _memoryCache.Set($"{cachePrefix}episodes_{series.SeriesId}_{seasonId}", episodeList, cacheOptions);
 
                             // Cache season info
-                            Season? season = seriesStreamInfo?.Seasons.FirstOrDefault(s => s.SeasonId == seasonId);
+                            XtreamSeason? season = seriesStreamInfo?.Seasons.FirstOrDefault(s => s.SeasonId == seasonId);
                             _memoryCache.Set($"{cachePrefix}season_{series.SeriesId}_{seasonId}", season, cacheOptions);
                         }
 
@@ -322,6 +336,45 @@ public class SeriesCacheService : IDisposable
                     seriesCount,
                     seasonCount,
                     episodeCount);
+
+                // Fetch TVDb images for series if enabled
+                bool useTvdb = Plugin.Instance?.Configuration.UseTvdbForSeriesMetadata ?? true;
+                if (useTvdb && _providerManager != null)
+                {
+                    _logger?.LogInformation("Looking up TVDb metadata for {Count} series...", totalSeries);
+                    _currentStatus = "Fetching TVDb images...";
+
+                    int tmdbFound = 0;
+                    int tmdbNotFound = 0;
+
+                    foreach (var kvp in seriesListsByCategory)
+                    {
+                        foreach (var series in kvp.Value)
+                        {
+                            _refreshCancellationTokenSource.Token.ThrowIfCancellationRequested();
+
+                            string? tmdbUrl = await LookupAndCacheTmdbImageAsync(
+                                series.SeriesId,
+                                series.Name,
+                                cacheOptions,
+                                _refreshCancellationTokenSource.Token).ConfigureAwait(false);
+
+                            if (tmdbUrl != null)
+                            {
+                                tmdbFound++;
+                            }
+                            else
+                            {
+                                tmdbNotFound++;
+                            }
+                        }
+                    }
+
+                    _logger?.LogInformation(
+                        "TVDb lookup completed: {Found} found, {NotFound} not found",
+                        tmdbFound,
+                        tmdbNotFound);
+                }
 
                 progress?.Report(1.0); // 100% complete
                 _currentProgress = 1.0;
@@ -428,12 +481,12 @@ public class SeriesCacheService : IDisposable
     /// <param name="seriesId">The series ID.</param>
     /// <param name="seasonId">The season ID.</param>
     /// <returns>Cached season info, or null if not available.</returns>
-    public Season? GetCachedSeason(int seriesId, int seasonId)
+    public XtreamSeason? GetCachedSeason(int seriesId, int seasonId)
     {
         try
         {
             string cacheKey = $"{CachePrefix}season_{seriesId}_{seasonId}";
-            return _memoryCache.TryGetValue(cacheKey, out Season? season) ? season : null;
+            return _memoryCache.TryGetValue(cacheKey, out XtreamSeason? season) ? season : null;
         }
         catch
         {
@@ -447,12 +500,12 @@ public class SeriesCacheService : IDisposable
     /// <param name="seriesId">The series ID.</param>
     /// <param name="seasonId">The season ID.</param>
     /// <returns>Cached episodes, or null if not available.</returns>
-    public IEnumerable<Episode>? GetCachedEpisodes(int seriesId, int seasonId)
+    public IEnumerable<XtreamEpisode>? GetCachedEpisodes(int seriesId, int seasonId)
     {
         try
         {
             string cacheKey = $"{CachePrefix}episodes_{seriesId}_{seasonId}";
-            if (_memoryCache.TryGetValue(cacheKey, out List<Episode>? episodes) && episodes != null)
+            if (_memoryCache.TryGetValue(cacheKey, out List<XtreamEpisode>? episodes) && episodes != null)
             {
                 return episodes;
             }
@@ -470,12 +523,12 @@ public class SeriesCacheService : IDisposable
     /// </summary>
     /// <param name="categoryId">The category ID.</param>
     /// <returns>Cached series list, or null if not available.</returns>
-    public IEnumerable<Series>? GetCachedSeriesList(int categoryId)
+    public IEnumerable<XtreamSeries>? GetCachedSeriesList(int categoryId)
     {
         try
         {
             string cacheKey = $"{CachePrefix}serieslist_{categoryId}";
-            if (_memoryCache.TryGetValue(cacheKey, out List<Series>? seriesList) && seriesList != null)
+            if (_memoryCache.TryGetValue(cacheKey, out List<XtreamSeries>? seriesList) && seriesList != null)
             {
                 return seriesList;
             }
@@ -486,6 +539,237 @@ public class SeriesCacheService : IDisposable
         {
             return null;
         }
+    }
+
+    /// <summary>
+    /// Gets the cached TMDB image URL for a series.
+    /// </summary>
+    /// <param name="seriesId">The series ID.</param>
+    /// <returns>TMDB image URL, or null if not cached.</returns>
+    public string? GetCachedTmdbImageUrl(int seriesId)
+    {
+        try
+        {
+            string cacheKey = $"{CachePrefix}tmdb_image_{seriesId}";
+            if (_memoryCache.TryGetValue(cacheKey, out string? imageUrl) && imageUrl != null)
+            {
+                return imageUrl;
+            }
+
+            _logger?.LogWarning("No cached TVDb image found for series {SeriesId} (key: {CacheKey})", seriesId, cacheKey);
+            return null;
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogWarning(ex, "Error retrieving cached TVDb image for series {SeriesId}", seriesId);
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Looks up TMDB image URL for a series and caches it.
+    /// </summary>
+    /// <param name="seriesId">The Xtream series ID.</param>
+    /// <param name="seriesName">The series name to search for.</param>
+    /// <param name="cacheOptions">Cache options to use.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The TMDB image URL if found, null otherwise.</returns>
+    private async Task<string?> LookupAndCacheTmdbImageAsync(
+        int seriesId,
+        string seriesName,
+        MemoryCacheEntryOptions cacheOptions,
+        CancellationToken cancellationToken)
+    {
+        if (_providerManager == null)
+        {
+            return null;
+        }
+
+        try
+        {
+            // Parse the name to remove tags
+            string cleanName = StreamService.ParseName(seriesName).Title;
+            if (string.IsNullOrWhiteSpace(cleanName))
+            {
+                return null;
+            }
+
+            // Try to find an image with progressively cleaned search terms
+            string[] searchTerms = GenerateSearchTerms(cleanName);
+
+            foreach (string searchTerm in searchTerms)
+            {
+                if (string.IsNullOrWhiteSpace(searchTerm))
+                {
+                    continue;
+                }
+
+                // Search TVDb for the series
+                RemoteSearchQuery<JellyfinSeriesInfo> query = new()
+                {
+                    SearchInfo = new() { Name = searchTerm },
+                    SearchProviderName = "TheTVDB",
+                };
+
+                IEnumerable<RemoteSearchResult> results = await _providerManager
+                    .GetRemoteSearchResults<JellyfinSeries, JellyfinSeriesInfo>(query, cancellationToken)
+                    .ConfigureAwait(false);
+
+                // Find first result with a real image (not a placeholder)
+                RemoteSearchResult? resultWithImage = results.FirstOrDefault(r =>
+                    !string.IsNullOrEmpty(r.ImageUrl) &&
+                    !r.ImageUrl.Contains("missing/series", StringComparison.OrdinalIgnoreCase) &&
+                    !r.ImageUrl.Contains("missing/movie", StringComparison.OrdinalIgnoreCase));
+                if (resultWithImage?.ImageUrl != null)
+                {
+                    // Cache the TVDb image URL
+                    string cacheKey = $"{CachePrefix}tmdb_image_{seriesId}";
+                    _memoryCache.Set(cacheKey, resultWithImage.ImageUrl, cacheOptions);
+                    _logger?.LogInformation("Cached TVDb image for series {SeriesId} ({Name}) using search term '{SearchTerm}': {Url}", seriesId, cleanName, searchTerm, resultWithImage.ImageUrl);
+                    return resultWithImage.ImageUrl;
+                }
+            }
+
+            _logger?.LogWarning("TVDb search found no image for series {SeriesId} ({Name}) after trying: {SearchTerms}", seriesId, cleanName, string.Join(", ", searchTerms));
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogWarning(ex, "Failed to lookup TVDb image for series {SeriesId} ({Name})", seriesId, seriesName);
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Generates multiple search terms from a series name, progressively cleaning it.
+    /// TVDb doesn't search by localized titles, so we need to try variations.
+    /// Uses user-configurable translations from plugin settings.
+    /// </summary>
+    /// <param name="name">The original series name.</param>
+    /// <returns>Array of search terms to try, from most specific to most generic.</returns>
+    private static string[] GenerateSearchTerms(string name)
+    {
+        List<string> terms = new();
+        var config = Plugin.Instance?.Configuration;
+
+        // 1. Add original name first
+        terms.Add(name);
+
+        // 2. Remove language indicators like "(NL Gesproken)", "(DE)", "(French)", etc.
+        string withoutLang = System.Text.RegularExpressions.Regex.Replace(
+            name,
+            @"\s*\([^)]*(?:Gesproken|Dubbed|Subbed|NL|DE|FR|Dutch|German|French|Nederlands|Deutsch)[^)]*\)\s*",
+            string.Empty,
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase).Trim();
+
+        if (!string.Equals(withoutLang, name, StringComparison.OrdinalIgnoreCase) && !string.IsNullOrWhiteSpace(withoutLang))
+        {
+            terms.Add(withoutLang);
+        }
+
+        // 3. Try user-configured "word for and" substitutions (e.g., "en" → "&" and "and")
+        string wordForAnd = config?.TvdbWordForAnd ?? string.Empty;
+        if (!string.IsNullOrWhiteSpace(wordForAnd))
+        {
+            string pattern = $" {wordForAnd} ";
+            if (withoutLang.Contains(pattern, StringComparison.OrdinalIgnoreCase))
+            {
+                // Try with "&"
+                string withAmpersand = withoutLang.Replace(pattern, " & ", StringComparison.OrdinalIgnoreCase);
+                if (!terms.Contains(withAmpersand, StringComparer.OrdinalIgnoreCase))
+                {
+                    terms.Add(withAmpersand);
+                }
+
+                // Try with "and"
+                string withAnd = withoutLang.Replace(pattern, " and ", StringComparison.OrdinalIgnoreCase);
+                if (!terms.Contains(withAnd, StringComparer.OrdinalIgnoreCase))
+                {
+                    terms.Add(withAnd);
+                }
+
+                // Try "word_for_and the" → "and the"
+                string patternThe = $" {wordForAnd} the ";
+                if (withoutLang.Contains(patternThe, StringComparison.OrdinalIgnoreCase))
+                {
+                    string withAndThe = withoutLang.Replace(patternThe, " and the ", StringComparison.OrdinalIgnoreCase);
+                    if (!terms.Contains(withAndThe, StringComparer.OrdinalIgnoreCase))
+                    {
+                        terms.Add(withAndThe);
+                    }
+                }
+            }
+        }
+
+        // 4. Try user-configured article substitution (e.g., "De " → "The ")
+        string languageArticle = config?.TvdbLanguageArticle ?? string.Empty;
+        if (!string.IsNullOrWhiteSpace(languageArticle))
+        {
+            string articleWithSpace = languageArticle.Trim() + " ";
+            if (withoutLang.StartsWith(articleWithSpace, StringComparison.OrdinalIgnoreCase))
+            {
+                string withThe = string.Concat("The ", withoutLang.AsSpan(articleWithSpace.Length));
+                if (!terms.Contains(withThe, StringComparer.OrdinalIgnoreCase))
+                {
+                    terms.Add(withThe);
+                }
+            }
+        }
+
+        // 5. Apply user-configured word translations
+        string translationsConfig = config?.TvdbSearchTranslations ?? string.Empty;
+        if (!string.IsNullOrWhiteSpace(translationsConfig))
+        {
+            var wordSubstitutions = ParseTranslations(translationsConfig);
+
+            string current = withoutLang;
+            bool anySubstitution = false;
+            foreach (var kvp in wordSubstitutions)
+            {
+                if (current.Contains(kvp.Key, StringComparison.OrdinalIgnoreCase))
+                {
+                    current = current.Replace(kvp.Key, kvp.Value, StringComparison.OrdinalIgnoreCase);
+                    anySubstitution = true;
+                }
+            }
+
+            if (anySubstitution && !terms.Contains(current, StringComparer.OrdinalIgnoreCase))
+            {
+                terms.Add(current);
+            }
+        }
+
+        return terms.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+    }
+
+    /// <summary>
+    /// Parses the translation configuration string into a dictionary.
+    /// Format: one mapping per line, "LocalWord=EnglishWord".
+    /// </summary>
+    private static Dictionary<string, string> ParseTranslations(string config)
+    {
+        var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        if (string.IsNullOrWhiteSpace(config))
+        {
+            return result;
+        }
+
+        foreach (string line in config.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            int equalsIndex = line.IndexOf('=', StringComparison.Ordinal);
+            if (equalsIndex > 0 && equalsIndex < line.Length - 1)
+            {
+                string key = line[..equalsIndex].Trim();
+                string value = line[(equalsIndex + 1)..].Trim();
+                if (!string.IsNullOrEmpty(key) && !string.IsNullOrEmpty(value))
+                {
+                    result[key] = value;
+                }
+            }
+        }
+
+        return result;
     }
 
     /// <summary>

@@ -135,6 +135,11 @@ public class SeriesChannel(ILogger<SeriesChannel> logger) : IChannel, IDisableMe
     private ChannelItemInfo CreateChannelItemInfo(Series series)
     {
         ParsedName parsedName = StreamService.ParseName(series.Name);
+
+        // Use cached TVDb image if available, otherwise fall back to Xtream cover
+        string? imageUrl = Plugin.Instance.SeriesCacheService.GetCachedTmdbImageUrl(series.SeriesId);
+        imageUrl ??= series.Cover;
+
         return new ChannelItemInfo()
         {
             CommunityRating = (float)series.Rating5Based,
@@ -142,7 +147,7 @@ public class SeriesChannel(ILogger<SeriesChannel> logger) : IChannel, IDisableMe
             FolderType = ChannelFolderType.Series,
             Genres = GetGenres(series.Genre),
             Id = StreamService.ToGuid(StreamService.SeriesPrefix, series.CategoryId, series.SeriesId, 0).ToString(),
-            ImageUrl = series.Cover,
+            ImageUrl = imageUrl,
             Name = parsedName.Title,
             SeriesName = parsedName.Title,
             People = GetPeople(series.Cast),

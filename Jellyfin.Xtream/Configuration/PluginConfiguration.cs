@@ -137,6 +137,36 @@ public class PluginConfiguration : BasePluginConfiguration
     public int CacheRefreshMinDelayMs { get; set; } = 100;
 
     /// <summary>
+    /// Gets or sets a value indicating whether to use TVDb for series metadata and images.
+    /// When enabled, series are looked up on TVDb to get proper artwork and metadata.
+    /// This works regardless of whether the Xtream provider blocks image access.
+    /// Default is true.
+    /// </summary>
+    public bool UseTvdbForSeriesMetadata { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets custom word translations for TVDb search.
+    /// Format: one mapping per line, "LocalWord=EnglishWord".
+    /// Example: "Bouwers=Builders" will replace "Bouwers" with "Builders" when searching TVDb.
+    /// This helps find series when your provider uses localized titles.
+    /// </summary>
+    public string TvdbSearchTranslations { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Gets or sets the language prefix to strip from series names (e.g., "De " for Dutch "The ").
+    /// Will be replaced with "The " when searching TVDb.
+    /// Leave empty to disable.
+    /// </summary>
+    public string TvdbLanguageArticle { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Gets or sets the word for "and" in your language (e.g., "en" for Dutch).
+    /// Will try "&amp;" and "and" substitutions when searching TVDb.
+    /// Leave empty to disable.
+    /// </summary>
+    public string TvdbWordForAnd { get; set; } = string.Empty;
+
+    /// <summary>
     /// Gets or sets the channels displayed in Live TV.
     /// </summary>
     public SerializableDictionary<int, HashSet<int>> LiveTv { get; set; } = [];
