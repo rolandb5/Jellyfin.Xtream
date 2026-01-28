@@ -72,6 +72,52 @@
             </div>
           </div>
         </div>
+        <div class="sectionTitleContainer flex align-items-center" style="margin-top: 1em;">
+          <h2 class="sectionTitle">Language Matching Booster</h2>
+        </div>
+        <div class="checkboxContainer checkboxContainer-withDescription">
+          <label>
+            <input is="emby-checkbox" id="UseTvdbForSeriesMetadata" name="UseTvdbForSeriesMetadata" type="checkbox" checked />
+            <span>Enable TVDb Artwork Lookup</span>
+          </label>
+          <div class="fieldDescription">
+            Fetch series artwork from TVDb using intelligent title matching. Falls back to Xtream provider images if no match is found.
+          </div>
+        </div>
+        <div id="TvdbOptionsContainer">
+          <div class="inputContainer">
+            <label class="inputLabel" for="TvdbLanguagePreset">Language Preset</label>
+            <select is="emby-select" id="TvdbLanguagePreset" name="TvdbLanguagePreset" class="emby-select-withcolor">
+              <option value="">Custom (manual configuration)</option>
+            </select>
+            <div class="fieldDescription">
+              Select your language to auto-fill common settings. You can still customize translations below.
+            </div>
+          </div>
+          <div class="inputContainer">
+            <label class="inputLabel" for="TvdbWordForAnd">Word for "and" in your language</label>
+            <input is="emby-input" type="text" id="TvdbWordForAnd" name="TvdbWordForAnd" placeholder="e.g., en (Dutch), und (German), et (French)" />
+            <div class="fieldDescription">
+              Your language's word for "and". Used to find series like "Tom en Jerry" → "Tom & Jerry" on TVDb.
+            </div>
+          </div>
+          <div class="inputContainer">
+            <label class="inputLabel" for="TvdbLanguageArticle">Article prefix (like "The")</label>
+            <input is="emby-input" type="text" id="TvdbLanguageArticle" name="TvdbLanguageArticle" placeholder="e.g., De (Dutch), Die (German), Le/La (French)" />
+            <div class="fieldDescription">
+              Your language's article prefix. "De Smurfen" → "The Smurfen" for TVDb search.
+            </div>
+          </div>
+          <div class="inputContainer">
+            <label class="inputLabel" for="TvdbSearchTranslations">Word Translations (one per line)</label>
+            <textarea is="emby-textarea" id="TvdbSearchTranslations" name="TvdbSearchTranslations" rows="6"
+              placeholder="Bouwers=Builders&#10;avonturen=Adventures&#10;vrienden=Friends" style="width: 100%; font-family: monospace;"></textarea>
+            <div class="fieldDescription">
+              Custom word translations for TVDb search. Format: LocalWord=EnglishWord (one per line).<br>
+              Example: "Bouwers=Builders" makes "Bugs Bunny Bouwers" searchable as "Bugs Bunny Builders".
+            </div>
+          </div>
+        </div>
         <div class="sectionTitleContainer flex align-items-center">
           <h2 class="sectionTitle">Series selection</h2>
         </div>

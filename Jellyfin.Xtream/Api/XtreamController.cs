@@ -14,8 +14,11 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Net.Mime;
+using System.Reflection;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Jellyfin.Xtream.Api.Models;
@@ -278,5 +281,85 @@ public class XtreamController(IXtreamClient xtreamClient) : ControllerBase
         }
 
         return Ok(new { Success = true, Message = message });
+    }
+
+    /// <summary>
+    /// Get all available TVDb language presets.
+    /// </summary>
+    /// <returns>List of available language codes and names.</returns>
+    [Authorize(Policy = "RequiresElevation")]
+    [HttpGet("Languages")]
+    public ActionResult<IEnumerable<object>> GetLanguages()
+    {
+        var languages = new List<object>();
+        var assembly = Assembly.GetExecutingAssembly();
+        var resourcePrefix = "Jellyfin.Xtream.Configuration.Web.languages.";
+
+        foreach (var resourceName in assembly.GetManifestResourceNames())
+        {
+            if (resourceName.StartsWith(resourcePrefix, System.StringComparison.Ordinal) &&
+                resourceName.EndsWith(".json", System.StringComparison.Ordinal))
+            {
+                using var stream = assembly.GetManifestResourceStream(resourceName);
+                if (stream != null)
+                {
+                    using var reader = new StreamReader(stream);
+                    var json = reader.ReadToEnd();
+                    using var doc = JsonDocument.Parse(json);
+                    var root = doc.RootElement;
+
+                    languages.Add(new
+                    {
+                        Code = root.GetProperty("code").GetString(),
+                        Name = root.GetProperty("name").GetString()
+                    });
+                }
+            }
+        }
+
+        return Ok(languages.OrderBy(l => ((dynamic)l).Name));
+    }
+
+    /// <summary>
+    /// Get a specific TVDb language preset.
+    /// </summary>
+    /// <param name="code">The language code (e.g., "nl", "de", "fr").</param>
+    /// <returns>The language preset configuration.</returns>
+    [Authorize(Policy = "RequiresElevation")]
+    [HttpGet("Languages/{code}")]
+    public ActionResult<object> GetLanguage(string code)
+    {
+        var assembly = Assembly.GetExecutingAssembly();
+        var resourceName = $"Jellyfin.Xtream.Configuration.Web.languages.{code}.json";
+
+        using var stream = assembly.GetManifestResourceStream(resourceName);
+        if (stream == null)
+        {
+            return NotFound(new { Error = $"Language preset '{code}' not found" });
+        }
+
+        using var reader = new StreamReader(stream);
+        var json = reader.ReadToEnd();
+        using var doc = JsonDocument.Parse(json);
+        var root = doc.RootElement;
+
+        // Convert translations array to newline-separated string for the UI
+        var translations = new List<string>();
+        if (root.TryGetProperty("translations", out var translationsArray))
+        {
+            foreach (var item in translationsArray.EnumerateArray())
+            {
+                translations.Add(item.GetString() ?? string.Empty);
+            }
+        }
+
+        return Ok(new
+        {
+            Code = root.GetProperty("code").GetString(),
+            Name = root.GetProperty("name").GetString(),
+            Article = root.GetProperty("article").GetString(),
+            WordForAnd = root.GetProperty("wordForAnd").GetString(),
+            Translations = string.Join("\n", translations)
+        });
     }
 }
