@@ -55,11 +55,11 @@ Fixed bug where episodes wouldn't display due to Xtream API storing episodes und
 - [Changelog](features/03-missing-episodes-fix/CHANGELOG.md) - Version history
 
 #### [04 - Eager Caching](features/04-eager-caching/REQUIREMENTS.md) ⭐ **Major Feature**
-**Status:** ✅ Implemented (v0.9.5.0+)
+**Status:** ✅ Implemented (v0.9.5.0+, hardened in v0.9.12.0)
 **PR Ready:** 🟡 Needs upstream testing and splitting
 **Testing:** ✅ 12/12 automated tests pass
 
-Pre-fetch and cache all series data upfront, automatically populate Jellyfin database for instant browsing.
+Pre-fetch and cache all series data upfront, automatically populate Jellyfin database for instant browsing. v0.9.12.0 adds category save guard, CTS race fix, cancel-on-save, and error logging thresholds.
 
 - [Requirements](features/04-eager-caching/REQUIREMENTS.md) - Comprehensive requirements document
 - [Architecture](features/04-eager-caching/ARCHITECTURE.md) - Three-layer cache architecture
@@ -110,6 +110,20 @@ Improved error handling and user feedback in configuration UI (Clear Cache stuck
 - [Test Plan](features/07-config-ui-error-handling/TEST_PLAN.md) - Manual test cases
 - [Changelog](features/07-config-ui-error-handling/CHANGELOG.md) - Version history
 
+#### [08 - TVDb Artwork Injection](features/08-tvdb-artwork-injection/REQUIREMENTS.md) ⭐ **Major Feature**
+**Status:** ✅ Implemented (v0.9.10.0, hardened in v0.9.12.0)
+**PR Ready:** 🟡 Needs upstream testing
+**Testing:** Manual tests defined
+**Documentation:** ✅ Complete
+
+Look up series artwork from TVDb during cache refresh, replacing Xtream provider images with high-quality TVDb artwork. Includes manual title-to-TVDb-ID override map for edge cases.
+
+- [Requirements](features/08-tvdb-artwork-injection/REQUIREMENTS.md) - User stories and functional requirements
+- [Architecture](features/08-tvdb-artwork-injection/ARCHITECTURE.md) - TVDb lookup pipeline and fallback chain
+- [Implementation](features/08-tvdb-artwork-injection/IMPLEMENTATION.md) - Code changes across 5 files
+- [Test Plan](features/08-tvdb-artwork-injection/TEST_PLAN.md) - 7 test suites with 40+ test cases
+- [Changelog](features/08-tvdb-artwork-injection/CHANGELOG.md) - Version history (v0.9.10.0 → v0.9.12.0)
+
 ---
 
 ### Reference Documentation
@@ -119,8 +133,6 @@ General guides and reference materials for development and deployment.
 - **[Project Context](reference/PROJECT_CONTEXT.md)** - Comprehensive project overview and history
 - **[Build Errors Prevention](reference/BUILD_ERRORS_PREVENTION.md)** - Common build errors and solutions
 - **[Repository Setup](reference/REPOSITORY_SETUP.md)** - How to set up the development environment
-- **[Deployment Guide](reference/DEPLOYMENT.md)** - Docker deployment, file permissions, troubleshooting
-- **[Debugging Guide](reference/DEBUGGING.md)** - How to debug the plugin, read logs, common patterns
 
 ---
 
@@ -282,9 +294,9 @@ This comprehensive documentation aims to:
 ## 📅 Last Updated
 
 - **Index Created:** 2026-01-27
-- **Last Modified:** 2026-01-27
-- **Documentation Version:** 1.3
-- **Plugin Version:** 0.9.5.3
+- **Last Modified:** 2026-01-28
+- **Documentation Version:** 1.4
+- **Plugin Version:** 0.9.12.0
 
 ---
 

@@ -82,6 +82,7 @@ Examples:
 - On plugin startup (if caching is enabled)
 - Scheduled task (default: every 60 minutes) via `SeriesCacheRefreshTask`
 - Manual refresh via "Clear Cache" button in plugin settings
+- Configuration save (cancels running refresh, starts new one with updated settings) — v0.9.12.0
 
 **Key characteristics:**
 - ✅ **Fast:** In-memory lookups are extremely fast (microseconds)
@@ -469,16 +470,25 @@ series_cache_{CacheDataVersion}_v{CacheVersion}_{type}_{id}
 
 ### CacheDataVersion
 
-Calculated in `Plugin.cs`:
+Calculated in `Plugin.cs` using `PluginConfiguration.GetCacheRelevantHash()`:
 ```csharp
-public string CacheDataVersion
+// Plugin.cs
+public string CacheDataVersion =>
+    Assembly.GetCallingAssembly().GetName().Version?.ToString()
+    + Configuration.GetCacheRelevantHash();
+
+// PluginConfiguration.cs — GetCacheRelevantHash()
+public int GetCacheRelevantHash()
 {
-    get
+    int hash = HashCode.Combine(BaseUrl, Username, Password, FlattenSeriesView);
+    hash = HashCode.Combine(hash, UseTvdbForSeriesMetadata, TvdbTitleOverrides);  // v0.9.12.0
+    foreach (var kvp in Series)
     {
-        // Hash of settings that affect cached data
-        string settingsHash = GetSettingsHash(Configuration);
-        return $"{settingsHash}";
+        hash = HashCode.Combine(hash, kvp.Key);
+        foreach (var val in kvp.Value)
+            hash = HashCode.Combine(hash, val);
     }
+    return hash;
 }
 ```
 
@@ -487,10 +497,13 @@ public string CacheDataVersion
 - Server URL changed
 - Credentials changed
 - Series filtering rules changed
+- `UseTvdbForSeriesMetadata` toggled (on/off) — added in v0.9.12.0
+- `TvdbTitleOverrides` changed (added, removed, or modified a mapping) — added in v0.9.12.0
 
 **When it DOESN'T change:**
 - Cache refresh frequency changed (doesn't affect data)
 - UI settings changed
+- Cache parallelism or throttle delay changed
 
 **Effect when changed:**
 - Old cache keys become inaccessible

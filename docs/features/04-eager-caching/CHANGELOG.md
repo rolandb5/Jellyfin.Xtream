@@ -1,5 +1,78 @@
 # Eager Caching - Changelog
 
+## v0.9.12.0 (2026-01-28)
+
+### Fixed — Caching Feature Hardening
+
+- **FIX (CRITICAL): Category save guard** — Prevent saving Series config when categories failed to load
+  - **Impact:** Previously, if the categories table failed to populate (network error, bad credentials), clicking Save would write an empty `Series` config, wiping all category/series selections
+  - **Guard:** `XtreamSeries.js` now checks `table.querySelectorAll('tr[data-category-id]').length === 0` before allowing save
+  - **Files:** `Configuration/Web/XtreamSeries.js` (lines 232-235)
+
+- **FIX: TVDb settings in cache hash** — `UseTvdbForSeriesMetadata` and `TvdbTitleOverrides` now included in `GetCacheRelevantHash()`
+  - **Impact:** Changing title overrides or toggling TVDb now correctly invalidates cache
+  - **Before:** Overrides changes required manual cache clear
+  - **Files:** `Configuration/PluginConfiguration.cs` (`GetCacheRelevantHash()`, line 186)
+
+- **FIX: Cancel running refresh on config save** — `Plugin.UpdateConfiguration()` calls `SeriesCacheService.CancelRefresh()` before starting a new refresh
+  - **Impact:** Override and setting changes take effect immediately instead of waiting for current refresh to complete
+  - **Files:** `Plugin.cs` (`UpdateConfiguration()`, line 224)
+
+- **FIX: CTS disposal race condition** — Atomic swap pattern for `_refreshCancellationTokenSource`
+  - **Impact:** Prevents `ObjectDisposedException` when `CancelRefresh()` and `RefreshCacheAsync()` overlap
+  - **Pattern:** Swap old CTS reference before disposing, create linked token from new CTS
+  - **Files:** `Service/SeriesCacheService.cs` (lines 121-123)
+
+- **FIX: Population error logging** — Database population errors now logged at WARNING level for the first 10 errors, then suppressed
+  - **Impact:** Easier diagnosis of population failures without log flooding
+  - **Threshold:** `maxWarningErrors = 10`; after that, a single summary warning is logged
+  - **Files:** `Service/SeriesCacheService.cs` (`PopulateJellyfinDatabaseAsync()`, lines 968-993)
+
+### Technical Details
+
+**Category save guard (XtreamSeries.js):**
+```javascript
+// Guard: only save if categories actually loaded into the table
+if (table.querySelectorAll('tr[data-category-id]').length === 0) {
+    Dashboard.alert('Cannot save: series categories failed to load.');
+    return false;
+}
+```
+
+**CTS atomic swap (SeriesCacheService.cs):**
+```csharp
+var oldCts = _refreshCancellationTokenSource;
+_refreshCancellationTokenSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+oldCts?.Dispose();
+```
+
+**Cancel-before-refresh (Plugin.cs):**
+```csharp
+// Cancel any running refresh so the new one can start with updated settings
+SeriesCacheService.CancelRefresh();
+_ = Task.Run(async () =>
+{
+    await Task.Delay(500).ConfigureAwait(false);
+    await SeriesCacheService.RefreshCacheAsync().ConfigureAwait(false);
+});
+```
+
+**Population error logging (SeriesCacheService.cs):**
+```csharp
+const int maxWarningErrors = 10;
+// ...
+if (errorCount <= maxWarningErrors)
+{
+    _logger?.LogWarning(ex, "Error populating episodes for season {SeasonId}", childItem.Id);
+}
+else if (errorCount == maxWarningErrors + 1)
+{
+    _logger?.LogWarning("Suppressing further population error details (total errors: {Count}+)", errorCount);
+}
+```
+
+---
+
 ## v0.9.6.0 (2026-01-27)
 
 ### Added - HTTP Retry Logic

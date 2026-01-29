@@ -1,7 +1,7 @@
 ---
 name: "Jellyfin Xtream (Flat View)"
 guid: "5d774c35-8567-46d3-a950-9bb8227a0c5d"
-version: "0.9.11.0"
+version: "0.9.14.0"
 targetAbi: "10.11.0.0"
 framework: "net9.0"
 overview: "Stream content from an Xtream-compatible server with flat series and VOD view."
@@ -13,6 +13,31 @@ owner: "Kevinjil"
 artifacts:
   - "Jellyfin.Xtream.dll"
 changelog: >
+  v0.9.14.0 - Delta-Based Database Population
+  - PERF: Delta-based detection using ExternalId (channel GUID) matching
+  - PERF: Fast path when database is fully populated (>95% threshold)
+  - PERF: Verification samples first 5 series to confirm children exist
+  - PERF: Parallel processing (5 concurrent) with 50ms throttling for new items
+  - PERF: Robust error handling for Jellyfin channel API edge cases
+  - EFFECT: Subsequent cache refreshes complete in ~6 seconds instead of minutes
+  - EFFECT: New series are still fully populated with seasons and episodes
+
+  v0.9.13.0 - TVDb Artwork Injection + Bug Fixes
+  - NEW: Metadata language preference — TVDb queries use Jellyfin's server-wide preferred language
+  - FIX: Season artwork now displays (ImageUrl was computed but never assigned to ChannelItemInfo)
+  - FIX: Episode names now show parsed title instead of hardcoded "Episode N"
+  - IMPROVED: Season image fallback chain: Xtream season cover → TVDb series poster → Xtream series cover
+  - IMPROVED: Episode image fallback chain: Xtream episode → season cover → TVDb series poster → Xtream series cover
+  - EFFECT: Seasons and episodes display artwork reliably via TVDb CDN fallback
+  - NOTE: Per-episode TVDb images not available (Jellyfin API limitation) — see TODO.md for future options
+
+  v0.9.12.0 - Caching Feature Hardening
+  - FIX (CRITICAL): Prevent saving Series config when categories failed to load (was wiping category selection)
+  - FIX: Include TVDb settings in cache hash — changing Title Overrides now correctly invalidates cache
+  - FIX: Cancel running cache refresh before starting new one on config save (overrides now take effect immediately)
+  - FIX: CancellationTokenSource disposal race condition in cache refresh (prevents ObjectDisposedException)
+  - FIX: Database population errors now logged at WARNING level (first 10) instead of DEBUG for easier diagnosis
+
   v0.9.11.0 - Title Override Map (replaces Language Booster)
   - NEW: Title Override Map — map series titles directly to TVDb IDs for guaranteed artwork matches
   - NEW: Direct TVDb ID lookup bypasses search ambiguity entirely

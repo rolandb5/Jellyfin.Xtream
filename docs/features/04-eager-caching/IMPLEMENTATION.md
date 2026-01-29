@@ -2,8 +2,8 @@
 
 ## Document Info
 - **Status:** Implemented
-- **Version:** 0.9.5.0+
-- **Last Updated:** 2026-01-27
+- **Version:** 0.9.5.0+ (hardened in 0.9.12.0)
+- **Last Updated:** 2026-01-28
 - **Related:** [REQUIREMENTS.md](./REQUIREMENTS.md), [ARCHITECTURE.md](./ARCHITECTURE.md)
 
 ---
@@ -17,6 +17,7 @@ The eager caching feature was implemented in phases:
 3. **Phase 3 (v0.9.5.0)**: True eager loading with automatic Jellyfin DB population
 4. **Phase 4 (v0.9.5.2)**: Clear Cache triggers Jellyfin DB cleanup
 5. **Phase 5 (v0.9.5.3)**: Malformed JSON handling for robust caching
+6. **Phase 6 (v0.9.12.0)**: Hardening — category save guard, CTS race fix, cancel-on-save, error logging thresholds
 
 ---
 
@@ -604,6 +605,116 @@ return Ok();  // Return immediately
      - 4xx = client errors (permanent, retrying won't help)
      - 429 (rate limit) handled as non-retryable (provider issue, not transient)
      - Network errors (no status code) are retryable
+
+---
+
+## 8. v0.9.12.0 Hardening
+
+### Category Save Guard (XtreamSeries.js)
+
+**Problem:** If the categories table failed to load (network error, bad credentials, Xtream server down), clicking Save would write an empty `Series` config to disk, wiping all category and series selections. The user would need to re-select all categories and series manually.
+
+**Solution:** Check that the DOM actually contains category rows before allowing save:
+
+```javascript
+// Guard: only save if categories actually loaded into the table
+if (table.querySelectorAll('tr[data-category-id]').length === 0) {
+    Dashboard.alert('Cannot save: series categories failed to load. Please check your credentials and refresh the page.');
+    return false;
+}
+```
+
+**File:** `Configuration/Web/XtreamSeries.js` (lines 232-235)
+
+### CancellationTokenSource Atomic Swap
+
+**Problem:** When `CancelRefresh()` was called concurrently with `RefreshCacheAsync()`, a race condition could cause `ObjectDisposedException` if the CTS was disposed between the null check and the `Cancel()` call.
+
+**Solution:** Use an atomic swap pattern — store old CTS reference, create new linked CTS, then dispose old:
+
+```csharp
+// In RefreshCacheAsync():
+var oldCts = _refreshCancellationTokenSource;
+_refreshCancellationTokenSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+oldCts?.Dispose();
+```
+
+**In CancelRefresh():**
+```csharp
+public void CancelRefresh()
+{
+    var cts = _refreshCancellationTokenSource;  // Local copy to avoid race
+    if (_isRefreshing && cts != null)
+    {
+        try
+        {
+            cts.Cancel();
+        }
+        catch (ObjectDisposedException)
+        {
+            // Already disposed, nothing to cancel
+        }
+    }
+}
+```
+
+**File:** `Service/SeriesCacheService.cs` (lines 121-123, 806-822)
+
+### Cancel-Before-Refresh in UpdateConfiguration
+
+**Problem:** When a user changed TVDb title overrides and saved, the currently running refresh would continue with the old overrides. The new overrides wouldn't take effect until the next scheduled refresh.
+
+**Solution:** Cancel the running refresh before starting a new one:
+
+```csharp
+// In Plugin.UpdateConfiguration():
+SeriesCacheService.CancelRefresh();
+
+_ = Task.Run(async () =>
+{
+    // Small delay to allow cancellation to propagate
+    await Task.Delay(500).ConfigureAwait(false);
+    await SeriesCacheService.RefreshCacheAsync().ConfigureAwait(false);
+});
+```
+
+**File:** `Plugin.cs` (`UpdateConfiguration()`, lines 223-238)
+
+**Why the 500ms delay:** The cancellation token needs time to propagate through async operations. Without the delay, the new refresh could start before the old one finishes cancelling, hitting the `_refreshLock` semaphore and being skipped.
+
+### Population Error Logging with Threshold
+
+**Problem:** When the Jellyfin database population encountered errors (e.g., bad metadata provider data for some series), it would log every error at WARNING level, flooding the log with hundreds of similar messages.
+
+**Solution:** Log the first N errors at WARNING level, then suppress further details:
+
+```csharp
+int errorCount = 0;
+const int maxWarningErrors = 10;
+
+// In catch blocks:
+errorCount++;
+if (errorCount <= maxWarningErrors)
+{
+    _logger?.LogWarning(ex, "Error populating episodes for season {SeasonId}", childItem.Id);
+}
+else if (errorCount == maxWarningErrors + 1)
+{
+    _logger?.LogWarning("Suppressing further population error details (total errors: {Count}+)", errorCount);
+}
+```
+
+**Final summary:**
+```csharp
+if (errorCount > 0)
+{
+    _logger?.LogWarning(
+        "Jellyfin database population completed with {ErrorCount} errors: {Series} items, {Seasons} seasons, {Episodes} episodes",
+        errorCount, seriesProcessed, seasonsProcessed, episodesProcessed);
+}
+```
+
+**File:** `Service/SeriesCacheService.cs` (`PopulateJellyfinDatabaseAsync()`, lines 911-1027)
 
 ---
 

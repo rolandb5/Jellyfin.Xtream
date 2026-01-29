@@ -1,6 +1,6 @@
 # Jellyfin Xtream Flat View - Quick Reference
 
-> **For AI Assistants:** This is a quick reference. For comprehensive context, see `docs/PROJECT_CONTEXT.md`.
+> **For AI Assistants:** This is a quick reference. For comprehensive context, see `docs/reference/PROJECT_CONTEXT.md`.
 
 ## Build & Release Process
 
@@ -111,11 +111,8 @@ sshpass -p '<password>' ssh -o StrictHostKeyChecking=no root@<server-ip> \
 - **`docs/reference/PROJECT_CONTEXT.md`** - Comprehensive project context
 - **`docs/reference/BUILD_ERRORS_PREVENTION.md`** - Guide to prevent build errors
 - **`docs/upstream/PR_PROPOSAL.md`** - Strategy for upstream contributions
-- **`docs/upstream/PR_STATUS.md`** - Dashboard tracking PR readiness for all features
-- **`docs/upstream/PR_WORKFLOW.md`** - Step-by-step PR submission guide
-- **`docs/REORGANIZATION_SUMMARY.md`** - Documentation reorganization summary
 
-### Feature Documentation (7 features)
+### Feature Documentation (8 features)
 Each feature has comprehensive documentation in `docs/features/<NN-feature-name>/`:
 - `REQUIREMENTS.md` - What and why (user stories, functional requirements)
 - `ARCHITECTURE.md` - How (design decisions, components, data flow)
@@ -127,9 +124,13 @@ Each feature has comprehensive documentation in `docs/features/<NN-feature-name>
 
 **Fully Documented:**
 - 01-flat-view (partial - REQUIREMENTS.md complete)
-- 04-eager-caching (complete - 8 documents) ⭐
-
-**Templates Available:** 02, 03, 05, 06, 07
+- 02-unicode-pipe-support (complete)
+- 03-missing-episodes-fix (complete)
+- 04-eager-caching (complete - 8 documents, hardened in v0.9.12.0) ⭐
+- 05-malformed-json-handling (complete)
+- 06-clear-cache-cleanup (complete)
+- 07-config-ui-error-handling (complete)
+- 08-tvdb-artwork-injection (complete - 5 documents) ⭐
 
 ### Automation Scripts
 ```bash
